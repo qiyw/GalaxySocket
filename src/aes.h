@@ -1,0 +1,13 @@
+#ifndef _AES_H
+#define _AES_H
+
+#include "openssl/aes.h"
+
+#define GS_AES_KEY_LEN 256
+#define GS_AES_ENCODE_LEN(s) (((s - 1) / AES_BLOCK_SIZE + 1) * AES_BLOCK_SIZE)
+
+int aes_encode(__const__ char *indata, __const__ int len, char *outdata, __const__ unsigned char *key);
+
+int aes_decode(__const__ char *indata, __const__ int len, char *outdata, __const__ unsigned char *key);
+
+#endif
