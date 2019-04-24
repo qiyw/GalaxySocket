@@ -1,10 +1,10 @@
 CC ?= cc
 PREFIX ?= /usr
-PREFIX_BIN = $(PREFIX)/bin
 
 SRCDIR = src
 OBJDIR = obj
 BINDIR = bin
+PREFIX_BIN = $(PREFIX)/$(BINDIR)
 OBJS = $(patsubst $(SRCDIR)/%.c,$(OBJDIR)/%.o,$(wildcard $(SRCDIR)/*.c))
 
 GSDNS_SRCS = gsdns.c iconf.c common.c base64.c aes.c sockmnr.c
@@ -42,6 +42,9 @@ $(BINDIR):
 $(OBJDIR):
 	@mkdir -p $(OBJDIR)
 
+$(PREFIX_BIN):
+	@mkdir -p $(PREFIX_BIN)
+
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) -c $(CFLAGS) $< -o $@
 
@@ -63,7 +66,10 @@ $(GSSERVER_BIN): $(OBJDIR) $(BINDIR) $(GSSERVER_OBJS)
 clean:
 	@rm -rf $(OBJDIR) $(BINDIR)
 
-install: all
-	cp -pf $(GSDNS_BIN) $(GSGENKEN_BIN) $(GSRED_BIN) $(GSSOCKS5_BIN) $(GSSERVER_BIN) $(PREFIX_BIN)
+install: all $(PREFIX_BIN)
+	cp -fp $(GSDNS_BIN) $(GSGENKEN_BIN) $(GSRED_BIN) $(GSSOCKS5_BIN) $(GSSERVER_BIN) $(PREFIX_BIN)
 
-.PHONY: all clean install
+uninstall:
+	rm -rf $(PREFIX)/$(GSDNS_BIN) $(PREFIX)/$(GSGENKEN_BIN) $(PREFIX)/$(GSRED_BIN) $(PREFIX)/$(GSSOCKS5_BIN) $(PREFIX)/$(GSSERVER_BIN)
+
+.PHONY: all clean install uninstall
