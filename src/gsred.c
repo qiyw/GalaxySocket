@@ -357,7 +357,7 @@ static void __on_tcp_remote_connected(uv_connect_t *conn,int status)
         if(addr.ss_family == AF_INET)
         {
             addr4 = (struct sockaddr_in *) &addr;
-            LOG_DEBUG("redir addr: %s:%d\n", inet_ntoa(addr4->sin_addr), ntohs(addr4->sin_port));
+            LOG_INFO("tcp redir tp addr: %s:%d\n", inet_ntoa(addr4->sin_addr), ntohs(addr4->sin_port));
             len = 7;
             buf = (char *) malloc(sizeof(char) * len);
             buf[0] = 0x01;
@@ -369,7 +369,7 @@ static void __on_tcp_remote_connected(uv_connect_t *conn,int status)
             char s[INET6_ADDRSTRLEN];
             addr6 = (struct sockaddr_in6 *) &addr;
             inet_ntop(AF_INET6, &addr6->sin6_addr, s, sizeof s);
-            LOG_DEBUG("redir addr: %s:%d\n", s, ntohs(addr6->sin6_port));
+            LOG_INFO("tcp redir to addr: %s:%d\n", s, ntohs(addr6->sin6_port));
             len = 19;
             buf = (char *) malloc(sizeof(char) * len);
             buf[0] = 0x04;
@@ -504,7 +504,7 @@ static void __udp_read_thread(void *arg)
         if(addr.ss_family == AF_INET)
         {
             addr4 = (struct sockaddr_in *) &addr;
-            LOG_DEBUG("redir addr: %s:%d\n", inet_ntoa(addr4->sin_addr), ntohs(addr4->sin_port));
+            LOG_INFO("udp redir to addr: %s:%d\n", inet_ntoa(addr4->sin_addr), ntohs(addr4->sin_port));
             len = 7;
             buf = (char *) malloc(sizeof(char) * (len + readsize));
             buf[0] = 0x01;
@@ -516,7 +516,7 @@ static void __udp_read_thread(void *arg)
             char s[INET6_ADDRSTRLEN];
             addr6 = (struct sockaddr_in6 *) &addr;
             inet_ntop(AF_INET6, &addr6->sin6_addr, s, sizeof s);
-            LOG_DEBUG("redir addr: %s:%d\n", s, ntohs(addr6->sin6_port));
+            LOG_INFO("udp redir to addr: %s:%d\n", s, ntohs(addr6->sin6_port));
             len = 19;
             buf = (char *) malloc(sizeof(char) * (len + readsize));
             buf[0] = 0x04;

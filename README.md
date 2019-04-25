@@ -3,21 +3,30 @@
 ## Intro
 
 Galaxy Socket is a lightweight secured proxy, it's written by pure c.
-It's is me first time use c.
+This is me first time use c write something.
 
 Current version: 1.0.0
 
 ## Features
 
-gsserver: Galaxy Socket Server.
-gsgenkey: generate the secret key.
-gsred:    forwarding the tcp/udp for iptables, udp need TPROXY.
-gssocks5: local socks5 server.
-gsdns:    local dns server.
+    gsserver: Galaxy Socket Server.
+
+    gsgenkey: generate the secret key.
+
+    gsred:    forwarding the tcp/udp for iptables, udp need TPROXY.
+
+    gssocks5: local socks5 server.
+
+    gsdns:    local dns server.
+
+## Dependencies
+* libuv
+* libiniparser
+* openssl
 
 ## Usage
 
-gs[server|red|socks5|dns] INI_FILE
+    gs[server|red|socks5|dns] INI_FILE
 
 ## License
 
