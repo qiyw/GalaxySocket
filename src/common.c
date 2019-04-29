@@ -41,19 +41,11 @@ static struct addrinfo *__gethostbyname(__const__ char *hostname)
     return result;
 }
 
-static int __isbindall6(char *ip)
-{
-    for(int i = 0; i < 16; i++)
-        if(ip[i] != 0)
-            return 0;
-    return 1;
-}
-
-static int __do_tcp_bind(struct sockaddr *addr, uv_tcp_t *server, uv_connection_cb cb)
+static int __do_tcp_bind(struct sockaddr *addr, uv_tcp_t *server, uv_connection_cb cb, unsigned int flags)
 {
     LOG_DEBUG("__do_tcp_bind start\n");
     int en;
-    if((en = uv_tcp_bind(server, addr, 0)))
+    if((en = uv_tcp_bind(server, addr, flags)))
     {
         LOG_ERR("tcp bind failed: %s\n", uv_strerror(en));
         return 1;
@@ -67,11 +59,11 @@ static int __do_tcp_bind(struct sockaddr *addr, uv_tcp_t *server, uv_connection_
     return 0;
 }
 
-static int __do_udp_bind(struct sockaddr *addr, uv_udp_t *server, uv_udp_recv_cb cb)
+static int __do_udp_bind(struct sockaddr *addr, uv_udp_t *server, uv_udp_recv_cb cb, unsigned int flags)
 {
     LOG_DEBUG("__do_udp_bind start\n");
     int en;
-    if((en = uv_udp_bind(server, addr, 0)))
+    if((en = uv_udp_bind(server, addr, flags)))
     {
         LOG_ERR("udp bind failed: %s\n", uv_strerror(en));
         return 1;
@@ -136,40 +128,37 @@ int do_bind(char *host6, char *host4, int port, uv_tcp_t **tcp, uv_connection_cb
     reverse((char *) &addr6.sin6_port, 2);
     if(tcp != NULL && tcp_cb != NULL)
     {
-        if(__do_tcp_bind((struct sockaddr *) &addr6, *tcp, tcp_cb) != 0)
+        if(__do_tcp_bind((struct sockaddr *) &addr6, *tcp, tcp_cb, UV_TCP_IPV6ONLY) != 0)
             return 1;
     }
     if(udp != NULL && udp_cb != NULL)
     {
-        if(__do_udp_bind((struct sockaddr *) &addr6, *udp, udp_cb) != 0)
+        if(__do_udp_bind((struct sockaddr *) &addr6, *udp, udp_cb, UV_UDP_IPV6ONLY) != 0)
             return 1;
     }
     LOG_INFO("server listen on %s:%d\n", host6, port);
 
-    if(!__isbindall6((char *) &(addr6.sin6_addr)))
+    //ipv4
+    if(getipv4hostbyname(host4, &addr) != 0)
     {
-        //ipv4
-        if(getipv4hostbyname(host4, &addr) != 0)
-        {
-            LOG_ERR("unknown ip4 host name: %s\n", host4);
-            return 1;
-        }
-        addr.sin_port = port;
-        reverse((char *) &addr.sin_port, 2);
-        if(tcp != NULL && tcp_cb != NULL)
-        {
-            tcp++;
-            if(__do_tcp_bind((struct sockaddr *) &addr, *tcp, tcp_cb) != 0)
-                return 1;
-        }
-        if(udp != NULL && udp_cb != NULL)
-        {
-            udp++;
-            if(__do_udp_bind((struct sockaddr *) &addr6, *udp, udp_cb) != 0)
-                return 1;
-        }
-        LOG_INFO("server listen on %s:%d\n", host4, port);
+        LOG_ERR("unknown ip4 host name: %s\n", host4);
+        return 1;
     }
+    addr.sin_port = port;
+    reverse((char *) &addr.sin_port, 2);
+    if(tcp != NULL && tcp_cb != NULL)
+    {
+        tcp++;
+        if(__do_tcp_bind((struct sockaddr *) &addr, *tcp, tcp_cb, 0) != 0)
+            return 1;
+    }
+    if(udp != NULL && udp_cb != NULL)
+    {
+        udp++;
+        if(__do_udp_bind((struct sockaddr *) &addr6, *udp, udp_cb, 0) != 0)
+            return 1;
+    }
+    LOG_INFO("server listen on %s:%d\n", host4, port);
 
     LOG_DEBUG("do_bind end\n");
     return 0;
