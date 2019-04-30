@@ -133,7 +133,7 @@ int do_bind(char *host6, char *host4, int port, uv_tcp_t **tcp, uv_connection_cb
     }
     if(udp != NULL && udp_cb != NULL)
     {
-        if(__do_udp_bind((struct sockaddr *) &addr6, *udp, udp_cb, UV_UDP_IPV6ONLY) != 0)
+        if(__do_udp_bind((struct sockaddr *) &addr6, *udp, udp_cb, UV_UDP_IPV6ONLY | UV_UDP_REUSEADDR) != 0)
             return 1;
     }
     LOG_INFO("server listen on %s:%d\n", host6, port);
@@ -155,7 +155,7 @@ int do_bind(char *host6, char *host4, int port, uv_tcp_t **tcp, uv_connection_cb
     if(udp != NULL && udp_cb != NULL)
     {
         udp++;
-        if(__do_udp_bind((struct sockaddr *) &addr6, *udp, udp_cb, 0) != 0)
+        if(__do_udp_bind((struct sockaddr *) &addr6, *udp, udp_cb, UV_UDP_REUSEADDR) != 0)
             return 1;
     }
     LOG_INFO("server listen on %s:%d\n", host4, port);
