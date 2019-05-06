@@ -337,7 +337,6 @@ static void __on_tcp_remote_connected(uv_connect_t *conn,int status)
     }
     else
     {
-
         if((en = uv_fileno((uv_handle_t *) client, &fd)) != 0)
         {
             LOG_ERR("get socket failed: %s\n", uv_strerror(en));

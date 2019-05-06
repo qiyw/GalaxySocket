@@ -21,6 +21,17 @@ typedef struct gs_udp_s
     struct gs_udp_s *server;
 } gs_udp_t;
 
+typedef struct gs_tcp_s
+{
+    gs_socket_t socket;
+    uv_loop_t *loop;
+    char *aes_key;
+    char proc;
+    struct sockaddr* srvaddr;
+    struct sockaddr* dnsaddr;
+    struct gs_tcp_s *map;
+} gs_tcp_t;
+
 static void __on_udp_read(uv_udp_t* handle, ssize_t nread, __const__ uv_buf_t *buf, __const__ struct sockaddr* addr, unsigned flags);
 
 static void __on_udp_remote_read(uv_udp_t* handle, ssize_t nread, __const__ uv_buf_t *buf, __const__ struct sockaddr* addr, unsigned flags);
@@ -28,6 +39,18 @@ static void __on_udp_remote_read(uv_udp_t* handle, ssize_t nread, __const__ uv_b
 static void __on_udp_handle_read(gs_socket_t *remote, __const__ char *buf, __const__ size_t len, __const__ int status);
 
 static void __on_udp_timeout(gs_socket_t *remote);
+
+static void __on_tcp_conn(uv_stream_t *stream, int status);
+
+static void __on_tcp_remote_connected(uv_connect_t *conn,int status);
+
+static void __on_tcp_remote_read(uv_stream_t *remote, ssize_t nread, __const__ uv_buf_t *buf);
+
+static void __on_tcp_remote_handle_connect(gs_socket_t *remote, __const__ char *buf, __const__ size_t len, __const__ int status);
+
+static void __on_tcp_read(uv_stream_t *client, ssize_t nread, __const__ uv_buf_t *buf);
+
+static void __on_tcp_remote_handle_read(gs_socket_t *remote, __const__ char *buf, __const__ size_t len, __const__ int status);
 
 static int __usage(char *prog)
 {
@@ -47,7 +70,8 @@ int main(int argc, char** argv)
     if(argc < 2)
         return __usage(argv[0]);
     conf_t **confs = conf_read(argv[1]);
-    gs_udp_t * udps[2];
+    gs_udp_t *udps[2];
+    gs_tcp_t *tcps[2];
     if(confs == NULL)
         return 1;
     uv_loop_t *loop = uv_default_loop();
@@ -106,7 +130,17 @@ int main(int argc, char** argv)
         memcpy(udps[1], udps[0], sizeof(gs_udp_t));
         uv_udp_init(loop, (uv_udp_t *) udps[0]);
         uv_udp_init(loop, (uv_udp_t *) udps[1]);
-        if(do_bind(conf->baddr6, conf->baddr, conf->bport, NULL, NULL, (uv_udp_t **) udps, __on_udp_read) != 0)
+        gs_tcp_t *tcp = (gs_tcp_t *) malloc(sizeof(gs_tcp_t));
+        tcp->loop = loop;
+        tcp->aes_key = aes_key;
+        tcp->srvaddr = (struct sockaddr *) srvaddr;
+        tcp->dnsaddr = (struct sockaddr *) dnsaddr;
+        tcps[0] = tcp;
+        tcps[1] = malloc(sizeof(gs_tcp_t));
+        memcpy(tcps[1], tcps[0], sizeof(gs_tcp_t));
+        uv_tcp_init(loop, (uv_tcp_t *) tcps[0]);
+        uv_tcp_init(loop, (uv_tcp_t *) tcps[1]);
+        if(do_bind(conf->baddr6, conf->baddr, conf->bport, (uv_tcp_t **) tcps, __on_tcp_conn, (uv_udp_t **) udps, __on_udp_read) != 0)
             continue;
     }
     manager_bind_loop(loop);
@@ -216,4 +250,178 @@ static void __on_udp_handle_read(gs_socket_t *remote, __const__ char *buf, __con
 static void __on_udp_timeout(gs_socket_t *remote)
 {
     free(((gs_udp_t *) remote)->addr);
+}
+
+static void __on_tcp_conn(uv_stream_t *stream, int status)
+{
+    int en;
+    LOG_DEBUG("__on_tcp_conn start\n");
+    if(status < 0)
+    {
+        LOG_ERR("client connect failed: %s\n", uv_strerror(status));
+        return;
+    }
+    gs_tcp_t *server = (gs_tcp_t *) stream;
+    gs_tcp_t *client = (gs_tcp_t *) malloc(sizeof(gs_tcp_t));
+    memset(client, '\0', sizeof(gs_tcp_t));
+    manager_register((gs_socket_t *) client);
+    client->loop = server->loop;
+    client->srvaddr = server->srvaddr;
+    client->aes_key = server->aes_key;
+    client->dnsaddr = server->dnsaddr;
+    client->map = NULL;
+    uv_tcp_init(client->loop, (uv_tcp_t *) client);
+    if (uv_accept(stream, (uv_stream_t*) client) == 0)
+    {
+        gs_tcp_t *remote = (gs_tcp_t *) malloc(sizeof(gs_tcp_t));
+        memset(remote, '\0', sizeof(gs_tcp_t));
+        manager_register((gs_socket_t *) remote);
+        uv_tcp_init(((gs_tcp_t *) client)->loop, (uv_tcp_t *) remote);
+        remote->map = client;
+        client->map = remote;
+        uv_connect_t *connect = (uv_connect_t * ) malloc(sizeof(uv_connect_t));
+        if((en = uv_tcp_connect(connect, (uv_tcp_t *) remote, client->srvaddr, __on_tcp_remote_connected)) != 0)
+        {
+            LOG_ERR("remote connteced failed: %s\n", uv_err_name(en));
+            manager_close((gs_socket_t *) client);
+            manager_close((gs_socket_t *) remote);
+        }
+        else
+        {
+            manager_reference((gs_socket_t *) client);
+            manager_reference((gs_socket_t *) remote);
+        }
+    }
+    else
+    {
+        LOG_ERR("client connect failed: %s\n", uv_strerror(status));
+        manager_close((gs_socket_t *) client);
+    }
+    LOG_DEBUG("__on_tcp_conn end\n");
+}
+
+static void __on_tcp_remote_connected(uv_connect_t *conn,int status)
+{
+    LOG_DEBUG("__on_tcp_remote_connected start\n");
+    int en;
+    uv_os_fd_t fd;
+    struct sockaddr_in *addr4;
+    struct sockaddr_in6 *addr6;
+    char *buf;
+    int len;
+    gs_tcp_t *remote = (gs_tcp_t *) conn->handle;
+    gs_tcp_t *client = remote->map;
+    manager_unreference((gs_socket_t *) client);
+    manager_unreference((gs_socket_t *) remote);
+    if(status != 0)
+    {
+        manager_close((gs_socket_t *) client);
+        manager_close((gs_socket_t *) remote);
+    }
+    else
+    {
+        if(client->dnsaddr->sa_family == AF_INET)
+        {
+            addr4 = (struct sockaddr_in *) client->dnsaddr;
+            len = 7;
+            buf = (char *) malloc(sizeof(char) * len);
+            buf[0] = 0x01;
+            memcpy(&buf[1], &addr4->sin_addr, 4);
+            memcpy(&buf[5], &addr4->sin_port, 2);
+        }
+        else
+        {
+            char s[INET6_ADDRSTRLEN];
+            addr6 = (struct sockaddr_in6 *) client->dnsaddr;
+            len = 19;
+            buf = (char *) malloc(sizeof(char) * len);
+            buf[0] = 0x04;
+            memcpy(&buf[1], &addr6->sin6_addr, 16);
+            memcpy(&buf[17], &addr6->sin6_port, 2);
+        }
+        gs_enc_write((gs_socket_t *) remote, NULL, buf, len, client->aes_key, 0, 0, 0);
+        uv_read_start((uv_stream_t*) remote, alloc_buffer, __on_tcp_remote_read);
+    }
+    free(conn);
+    LOG_DEBUG("__on_tcp_remote_connected end\n");
+}
+
+static void __on_tcp_remote_read(uv_stream_t *remote, ssize_t nread, __const__ uv_buf_t *buf)
+{
+    LOG_DEBUG("__on_tcp_remote_read start\n");
+    gs_socket_t *client = (gs_socket_t *) ((gs_tcp_t *) remote)->map;
+    if (nread > 0)
+    {
+        gs_parse((gs_socket_t *) remote, buf->base, nread, __on_tcp_remote_handle_connect, __on_tcp_remote_handle_read, ((gs_tcp_t *) client)->aes_key, 0);
+    }
+    if (nread < 0)
+    {
+        manager_close(client);
+        manager_close((gs_socket_t *) remote);
+        LOG_INFO("client closed\n");
+        if (nread != UV_EOF)
+            LOG_ERR("cause: %s\n", uv_err_name(nread));
+    }
+    free(buf->base);
+    LOG_DEBUG("__on_tcp_remote_read end\n");
+}
+
+static void __on_tcp_remote_handle_connect(gs_socket_t *remote, __const__ char *buf, __const__ size_t len, __const__ int status)
+{
+    LOG_DEBUG("__on_tcp_remote_handle_connect start\n");
+    gs_tcp_t *client = ((gs_tcp_t *) remote)->map;
+    if(((gs_tcp_t *) remote)->proc != 0)
+    {
+        manager_close(remote);
+        manager_close((gs_socket_t *) client);
+        return;
+    }
+    ((gs_tcp_t *) remote)->proc = 1;
+    if(status != 0)
+    {
+        manager_close(remote);
+        manager_close((gs_socket_t *) client);
+        return;
+    }
+    ((gs_tcp_t *) remote)->proc = 2;
+    uv_read_start((uv_stream_t*) client, alloc_buffer, __on_tcp_read);
+    LOG_DEBUG("__on_tcp_remote_handle_connect end\n");
+}
+
+static void __on_tcp_read(uv_stream_t *client, ssize_t nread, __const__ uv_buf_t *buf)
+{
+    LOG_DEBUG("__on_tcp_read start\n");
+    gs_tcp_t *remote = ((gs_tcp_t *) client)->map;
+    if (nread > 0)
+    {
+        gs_enc_write((gs_socket_t *) remote, NULL, buf->base, nread, ((gs_tcp_t *) client)->aes_key, 1, 0, 0);
+    }
+    if (nread < 0)
+    {
+        manager_close((gs_socket_t *) client);
+        manager_close((gs_socket_t *) remote);
+        LOG_INFO("client closed\n");
+        if (nread != UV_EOF)
+            LOG_ERR("cause: %s\n", uv_err_name(nread));
+    }
+    free(buf->base);
+    LOG_DEBUG("__on_tcp_read end\n");
+}
+
+static void __on_tcp_remote_handle_read(gs_socket_t *remote, __const__ char *buf, __const__ size_t len, __const__ int status)
+{
+    LOG_DEBUG("__on_tcp_remote_handle_read start\n");
+    gs_tcp_t *client = ((gs_tcp_t *) remote)->map;
+    if (len > 0 && status == 0 && ((gs_tcp_t *) remote)->proc == 2)
+    {
+        if(!manager_isclosed((gs_socket_t *) client))
+            gs_write((uv_stream_t *) client, buf, len);
+    }
+    else
+    {
+        manager_close(remote);
+        if(client != NULL)
+            manager_close((gs_socket_t *) client);
+    }
+    LOG_DEBUG("__on_tcp_remote_handle_read end\n");
 }
