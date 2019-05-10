@@ -36,7 +36,8 @@ static void __handle(uv_timer_t *handle)
     LOG_DEBUG("__handle start\n");
     gs_socket_t *p = NULL;
     gs_socket_t *n;
-    for(gs_socket_t *s = __manager_hearder.next; s != NULL; s = s->next)
+    gs_socket_t *s = __manager_hearder.next;
+    while(s != NULL)
     {
         if(s->count == 0)
         {
@@ -48,12 +49,15 @@ static void __handle(uv_timer_t *handle)
             if(n == NULL)
                 __manager_hearder.last = p;
             free(s);
+            s = n;
         }
         else
         {
             p = s;
+            s = s->next;
         }
     }
+
     LOG_DEBUG("__handle end\n");
 }
 
