@@ -4,7 +4,7 @@
 #include "iconf.h"
 #include "log.h"
 
-static void *__ckey(__const__ char *secname, __const__ char *prop, char *out)
+static void __ckey(__const__ char *secname, __const__ char *prop, char *out)
 {
     char *tmp = out;
     while(*secname)
@@ -17,9 +17,8 @@ static void *__ckey(__const__ char *secname, __const__ char *prop, char *out)
 
 static conf_t *__read_from_section(__const__ dictionary *d, __const__ char *secname)
 {
-    char *server, *key, *baddr, *baddr6, *s5_user, *s5_passwd, *dns_server;
-    char s5_auth;
-    int port, bport, tfo, dns_port;
+    char *server, *key, *baddr, *baddr6, *dns_server;
+    int port, bport, dns_port;
     char skey[1024];
     __ckey(secname, "bind_addr", skey);
     baddr = (char *) iniparser_getstring(d, skey, "localhost");
@@ -32,8 +31,6 @@ static conf_t *__read_from_section(__const__ dictionary *d, __const__ char *secn
         LOG_ERR("%s: bind_port must be 0-65535\n", secname);
         return NULL;
     }
-    __ckey(secname, "tcp_first_open", skey);
-    tfo = iniparser_getint(d, skey, 0);
     __ckey(secname, "server", skey);
     server = (char *) iniparser_getstring(d, skey, "localhost");
     __ckey(secname, "port", skey);
@@ -55,7 +52,6 @@ static conf_t *__read_from_section(__const__ dictionary *d, __const__ char *secn
     conf->baddr = baddr;
     conf->baddr6 = baddr6;
     conf->bport = bport;
-    conf->tfo = tfo;
     conf->server = server;
     conf->port = port;
     conf->key = key;

@@ -10,12 +10,12 @@ int main(int argc, char **argv)
     int el;
     int l = GS_AES_KEY_LEN / 8;
     unsigned char key[l];
-    char *b64d;
+    unsigned char *b64d;
     srand((unsigned) time(NULL));
     for(int i = 0; i < l; i++)
         key[i] = rand() % 256;
     el = B64_ENCODE_LEN(l);
-    b64d = (char *) malloc(sizeof(char) * el);
+    b64d = (unsigned char *) malloc(sizeof(char) * el);
     b64_encode(key, l, b64d);
     printf("key = %s\n", b64d);
     fflush(stdout);

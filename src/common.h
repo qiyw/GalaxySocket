@@ -1,42 +1,42 @@
 #ifndef _COMMON_H
 #define _COMMON_H
 
-#include <stddef.h>
+#include "pipe.h"
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <stdint.h>
 
-#include "uv.h"
-#include "sockmnr.h"
-
-#define DEFAULT_BACKLOG 128
 #define GS_RANDOM_LEN 1024
-#define BUFFER_SIZE 40960
 
-typedef void (*gs_handle_f)(gs_socket_t *, __const__ char*, __const__ size_t);
+typedef struct gs_socket_s gs_socket_t;
+typedef struct gs_socket_s gs_tcp_t;
+typedef struct gs_socket_s gs_udp_t;
 
-typedef void (*gs_parse_f)(gs_socket_t *, __const__ char*, __const__ size_t, __const__ int status);
-
-typedef void (*gs_getaddrinfo_cb_f)(gs_socket_t *, __const__ int, __const__ struct sockaddr *);
+struct gs_socket_s
+{
+    pp_socket_t s;
+    unsigned char *aes_key;
+    uint32_t crc32;
+    char *buf;
+    int len;
+    char tcp_flg;
+    struct sockaddr* seraddr;
+    struct sockaddr* dnsaddr;
+    void *data;
+};
 
 typedef struct
 {
-    union
-    {
-        uv_write_t tcp_req;
-        uv_udp_send_t udp_req;
-    };
-    uv_buf_t *buf;
-    size_t len;
-} write_req_t;
+    char status;
+    char unsed[2];
+} __attribute__((__packed__)) gs_header_t;
 
-typedef struct
-{
-    char atyp;
-    char* addr;
-    char len;
-    uint16_t port;
-} gs_addr_t;
+typedef int (*gs_parse_f)(gs_socket_t *, __const__ gs_header_t *, __const__ char *, uint32_t);
 
+int do_bind(char *host6, char *host4, int port, pp_loop_t *loop, unsigned char *aes_key, uint32_t crc32, struct sockaddr* seraddr, struct sockaddr* dnsaddr, void *data, int tcp_flags, int udp_flags, pp_tcp_connect_f tcp_cb, pp_udp_read_f udp_cb);
 
-int do_bind(char *host6, char *host4, int port, uv_tcp_t **tcp, uv_connection_cb tcp_cb, uv_udp_t **udp, uv_udp_recv_cb udp_cb);
+int closing(pp_socket_t *s);
 
 void chrswt(char *a, char *b);
 
@@ -48,22 +48,10 @@ int getipv4hostbyname(__const__ char *hostname, struct sockaddr_in *addr);
 
 int getipv6hostbyname(__const__ char *hostname, struct sockaddr_in6 *addr);
 
-void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
+int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char istcp, gs_parse_f on_conn_cb, gs_parse_f on_read_cb);
 
-void free_buffer(write_req_t *wr);
+int gs_enc_data(__const__ char *buf, __const__ int len, char **enc_buf, int *enc_len, char status, unsigned char *aes_key);
 
-void after_tcp_write(uv_write_t *req, int status);
-
-void after_udp_write(uv_udp_send_t *req, int status);
-
-void gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, gs_parse_f on_conn_cb, gs_parse_f on_read_cb, char *aes_key, char net);
-
-int gs_enc_write(__const__ gs_socket_t *s, __const__ struct sockaddr *addr, __const__ char *buf, __const__ size_t len, char *aes_key, char act, char net, char status);
-
-int gs_udp_send(uv_udp_t *server, __const__ char *buf, __const__ size_t len, __const__ struct sockaddr* client);
-
-int gs_write(uv_stream_t *client, __const__ char *buf, __const__ size_t len);
-
-int gs_getaddrinfo(uv_loop_t *loop, gs_socket_t *s, __const__ gs_addr_t *gsaddr, gs_getaddrinfo_cb_f cb);
+int parse_address(__const__ char *buf, __const__ int len, struct sockaddr* addr);
 
 #endif

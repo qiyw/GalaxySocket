@@ -1,14 +1,13 @@
 #ifndef _ICONF_H
 #define _ICONF_H
 
-#include "iniparser.h"
+#include "iniparser/iniparser.h"
 
 typedef struct
 {
     char *baddr;
     char *baddr6;
     int bport;
-    int tfo;
     char *server;
     int port;
     char *key;
