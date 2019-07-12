@@ -195,7 +195,8 @@ static int __udp_srv_on_read(gs_socket_t *s, __const__ gs_header_t *header, __co
     client->crc32 = ((gs_udp_t *) s)->crc32;
     client->data = NULL;
     pp_udp_init(pp_get_loop((pp_socket_t *) s), (pp_udp_t *) client, closing);
-    pp_udp_connect((pp_udp_t *) client, (struct sockaddr *) &addr);
+    if(pp_udp_connect((pp_udp_t *) client, (struct sockaddr *) &addr) != 0)
+        return 1;
     pp_udp_pipe_bind((pp_udp_t *) client, (pp_udp_t *) s);
     pp_udp_read_start((pp_udp_t *) client, __udp_clnt_read);
     LOG_DEBUG("__udp_srv_on_read end\n");

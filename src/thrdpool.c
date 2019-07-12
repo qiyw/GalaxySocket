@@ -28,7 +28,7 @@ static void *__thread_task(void *arg)
     task_t *task;
     void *(*fun)(void*);
     void *fun_arg;
-    char *sts;
+    char *sts = NULL;
     for(int i = 0; i < tpool->tnum; i++)
     {
         if(tpool->tids[i] == pthread_self())

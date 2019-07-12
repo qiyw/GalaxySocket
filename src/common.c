@@ -334,8 +334,8 @@ int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char ist
         s->buf = c;
         s->len = tlen;
     }
-    return 0;
     LOG_DEBUG("gs_parse end\n");
+    return 0;
 }
 
 int gs_enc_data(__const__ char *buf, __const__ int len, char **enc_buf, int *enc_len, char status, unsigned char *aes_key)

@@ -574,7 +574,7 @@ int pp_loop_run(pp_loop_t *loop)
             }
             if(s->active == PP_ACTIVE_EVENT && s->handling == 0 && s->type != PP_TYPE_UDP_FAKE)
             {
-                if(s->pipe_target == NULL || (s->pipe_target != NULL && s->pipe_target->active == PP_ACTIVE_EVENT))
+                if(s->pipe_target == NULL || s->pipe_target->type == PP_TYPE_UDP_FAKE || s->pipe_target->active == PP_ACTIVE_EVENT)
                 {
                     if(s->fd > max_fd)
                         max_fd = s->fd;

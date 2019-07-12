@@ -91,12 +91,12 @@ int main(int argc, char** argv)
         if(dnsaddr->ss_family == AF_INET)
         {
             addr4 = (struct sockaddr_in *) dnsaddr;
-            addr4->sin_port = htons(conf->port);
+            addr4->sin_port = htons(conf->dns_port);
         }
         else
         {
             addr6 = (struct sockaddr_in6 *) dnsaddr;
-            addr6->sin6_port = htons(conf->port);
+            addr6->sin6_port = htons(conf->dns_port);
         }
         if(do_bind(conf->baddr6, conf->baddr, conf->bport, loop, aes_key, crc, (struct sockaddr *) srvaddr, (struct sockaddr *) dnsaddr, NULL, 0, 0, __tcp_connect, __udp_srv_read) != 0)
         {
@@ -193,7 +193,6 @@ static int __tcp_srv_read(pp_tcp_t *srv, __const__ char *buf, __const__ int len)
     gs_enc_data(buf, len, &resbuf, &reslen, 0, ((gs_socket_t *) srv)->aes_key);
     int sts = pp_tcp_pipe_write(srv, resbuf, reslen);
     free(resbuf);
-    //TODO
     return sts;
     LOG_DEBUG("__tcp_srv_read end\n");
 }
