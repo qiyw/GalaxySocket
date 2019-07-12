@@ -328,6 +328,7 @@ int pp_tcp_accept(pp_tcp_t *server, pp_tcp_t *client)
     if(fd <= 0)
         return 1;
     client->fd = fd;
+    ((pp_socket_t *) server)->handling = 0;
     return 0;
 }
 
