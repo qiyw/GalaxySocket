@@ -152,24 +152,23 @@ static int __tcp_connect(pp_tcp_t *srv)
     {
         addr4 = (struct sockaddr_in *) client->dnsaddr;
         restmplen = 7;
-        char tmp[restmplen];
-        tmp[0] = 0x01;
-        memcpy(&tmp[1], &addr4->sin_addr, 4);
-        memcpy(&tmp[5], &addr4->sin_port, 2);
-        restmpbuf = tmp;
+        restmpbuf = malloc(sizeof(char) * (restmplen));
+        restmpbuf[0] = 0x01;
+        memcpy(restmpbuf + 1, &addr4->sin_addr, 4);
+        memcpy(restmpbuf + 5, &addr4->sin_port, 2);
     }
     else
     {
         addr6 = (struct sockaddr_in6 *) client->dnsaddr;
         restmplen = 19;
-        char tmp[restmplen];
-        tmp[0] = 0x04;
-        memcpy(&tmp[1], &addr6->sin6_addr, 16);
-        memcpy(&tmp[17], &addr6->sin6_port, 2);
-        restmpbuf = tmp;
+        restmpbuf = malloc(sizeof(char) * (restmplen));
+        restmpbuf[0] = 0x04;
+        memcpy(restmpbuf + 1, &addr6->sin6_addr, 16);
+        memcpy(restmpbuf + 17, &addr6->sin6_port, 2);
     }
     gs_enc_data(restmpbuf, restmplen, &resbuf, &reslen, 0, client->aes_key);
     int sts = pp_tcp_fast_write((pp_tcp_t *) client, client->seraddr, resbuf, reslen);
+    free(restmpbuf);
     free(resbuf);
     if(sts == 0)
     {
@@ -212,7 +211,7 @@ static int __tcp_clnt_on_connect(gs_socket_t *s, __const__ gs_header_t *header, 
         return 1;
     if(header->status == 0)
     {
-        pp_tcp_read_start((pp_tcp_t *) s, __tcp_srv_read);
+        pp_tcp_read_start((pp_tcp_t *) srv, __tcp_srv_read);
         return 0;
     }
     return 1;
@@ -221,10 +220,10 @@ static int __tcp_clnt_on_connect(gs_socket_t *s, __const__ gs_header_t *header, 
 static int __tcp_clnt_on_read(gs_socket_t *s, __const__ gs_header_t *header, __const__ char *buf, uint32_t len)
 {
     LOG_DEBUG("__tcp_clnt_on_read start\n");
+    LOG_DEBUG("__tcp_clnt_on_read end\n");
     if(header->status == 0)
         return pp_tcp_pipe_write((pp_tcp_t *) s, buf, len);
     return 1;
-    LOG_DEBUG("__tcp_clnt_on_read end\n");
 }
 
 static int __udp_srv_read(pp_udp_t *srv, __const__ struct msghdr *msg, __const__ char *buf, __const__ int len)
@@ -251,26 +250,25 @@ static int __udp_srv_read(pp_udp_t *srv, __const__ struct msghdr *msg, __const__
     {
         addr4 = (struct sockaddr_in *) client->dnsaddr;
         restmplen = 7;
-        char tmp[restmplen + len];
-        tmp[0] = 0x01;
-        memcpy(tmp + 1, &addr4->sin_addr, 4);
-        memcpy(tmp + 5, &addr4->sin_port, 2);
-        restmpbuf = tmp;
+        restmpbuf = malloc(sizeof(char) * (restmplen + len));
+        restmpbuf[0] = 0x01;
+        memcpy(restmpbuf + 1, &addr4->sin_addr, 4);
+        memcpy(restmpbuf + 5, &addr4->sin_port, 2);
     }
     else
     {
         addr6 = (struct sockaddr_in6 *) client->dnsaddr;
         restmplen = 19;
-        char tmp[restmplen + len];
-        tmp[0] = 0x04;
-        memcpy(tmp + 1, &addr6->sin6_addr, 16);
-        memcpy(tmp + 17, &addr6->sin6_port, 2);
-        restmpbuf = tmp;
+        restmpbuf = malloc(sizeof(char) * (restmplen + len));
+        restmpbuf[0] = 0x04;
+        memcpy(restmpbuf + 1, &addr6->sin6_addr, 16);
+        memcpy(restmpbuf + 17, &addr6->sin6_port, 2);
     }
     memcpy(restmpbuf + restmplen, buf, len);
     restmplen += len;
     gs_enc_data(restmpbuf, restmplen, &resbuf, &reslen, 0, client->aes_key);
     int r = pp_udp_write((pp_udp_t *) client, resbuf, reslen);
+    free(restmpbuf);
     free(resbuf);
     return r;
     LOG_DEBUG("__udp_srv_read end\n");

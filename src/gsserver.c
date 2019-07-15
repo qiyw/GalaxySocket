@@ -175,6 +175,8 @@ static int __udp_srv_read(pp_udp_t *srv, __const__ struct msghdr *msg, __const__
 {
     LOG_DEBUG("__udp_srv_read start\n");
     LOG_DEBUG("__udp_srv_read end\n");
+    for(int i = 0; i < len; i++)
+        printf("hex=%02x\n", buf[i]);
     return gs_parse((gs_socket_t *) srv, buf, len, 0, NULL, __udp_srv_on_read);
 }
 

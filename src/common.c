@@ -1,10 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
+#include <time.h>
 
 #include "common.h"
 #include "aes.h"
-#include "time.h"
 #include "log.h"
 #include "crc32.h"
 

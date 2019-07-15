@@ -194,6 +194,7 @@ static int __s5_connect(pp_tcp_t *srv, __const__ char *buf, __const__ int len)
     int dlen;
     struct sockaddr_storage addr;
     char resbuf[10];
+    memset(resbuf, '\0', 10);
     if(len <= headerlen)
         return 1;
     header = (s5_conn_header_t *) buf;
@@ -302,6 +303,7 @@ static int __tcp_clnt_on_connect(gs_socket_t *s, __const__ gs_header_t *header, 
 {
     LOG_DEBUG("__tcp_clnt_on_connect start\n");
     char resbuf[10];
+    memset(resbuf, '\0', 10);
     gs_tcp_t *srv = (gs_tcp_t *) pp_pipe_socket((pp_socket_t *) s);
     if(srv == NULL)
         return 1;
@@ -336,9 +338,10 @@ static int __udp_clnt_on_read(gs_socket_t *s, __const__ gs_header_t *header, __c
 {
     LOG_DEBUG("__udp_clnt_on_read start\n");
     pp_tcp_t *srv = (pp_tcp_t *) pp_pipe_socket((pp_socket_t *) s);
-    char resbuf[len + 10];
+    char resbuf[10 + len];
+    memset(resbuf, '\0', 10 + len);
     resbuf[3] = 0x01;
     memcpy(resbuf + 10, buf, len);
     LOG_DEBUG("__udp_clnt_on_read end\n");
-    return pp_tcp_write(srv, resbuf, len + 10);
+    return pp_tcp_write(srv, resbuf, 10 + len);
 }
