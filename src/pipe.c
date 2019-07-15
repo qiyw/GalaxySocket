@@ -519,6 +519,8 @@ int pp_loop_run(pp_loop_t *loop)
     pp_socket_t **sock_lst_tmp;
     pp_socket_t *s, *p;
     static char shf = 0;
+    if(loop->header == NULL)
+        return 1;
     if(shf == 0)
     {
         signal(SIGINT, __sighandler);
@@ -625,6 +627,7 @@ int pp_loop_run(pp_loop_t *loop)
         }
         free(sock_lst);
     }
+    return 0;
 }
 
 int pp_socket_pipe_bind(pp_socket_t *ss, pp_socket_t *st)
