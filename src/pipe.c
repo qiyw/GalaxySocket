@@ -18,7 +18,7 @@
 #define SOCKET_LAZY_INIT -10
 #define SOCKET_NULL -20
 #define MAX_LISTEN 128
-#define SELECT_TIMEOUT 100000
+#define SELECT_TIMEOUT 50000
 #define SOCKET_TIMEOUT 5
 #define MAX_THREAD 30
 
@@ -310,12 +310,18 @@ int pp_tcp_connect(pp_tcp_t *tcp, struct sockaddr *addr)
 
 int pp_tcp_read_start(pp_tcp_t *tcp, pp_tcp_read_f cb)
 {
-    if(tcp->is_srv != 0)
+    if(tcp->is_srv == 1)
         return 1;
     if(tcp->fd <= 0)
         return 1;
     tcp->read_cb = cb;
     tcp->active = PP_ACTIVE_EVENT;
+    if(tcp->is_srv == 2 && tcp->handling == 0)
+    {
+        tcp->handling = 1;
+        if(tpool_add_task(tcp->loop->tpool, __thread_handle, (void *) tcp) != 0)
+            abort();
+    }
     return 0;
 }
 
@@ -328,6 +334,7 @@ int pp_tcp_accept(pp_tcp_t *server, pp_tcp_t *client)
     if(fd <= 0)
         return 1;
     client->fd = fd;
+    client->is_srv = 2;
     ((pp_socket_t *) server)->handling = 0;
     return 0;
 }
@@ -580,7 +587,7 @@ int pp_loop_run(pp_loop_t *loop)
             }
             if(s->active == PP_ACTIVE_EVENT && s->handling == 0 && s->type != PP_TYPE_UDP_FAKE)
             {
-                if(s->pipe_target == NULL || s->pipe_target->type == PP_TYPE_UDP_FAKE || s->pipe_target->active != PP_ACTIVE_CLOSE)
+                if(s->pipe_target == NULL || s->pipe_target->active != PP_ACTIVE_CLOSE)
                 {
                     if(s->fd > max_fd)
                         max_fd = s->fd;

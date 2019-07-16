@@ -31,7 +31,7 @@ CFLAGS += -Os -Wall
 LDFLAGS += -s -lssl -lcrypto -liniparser -lpthread -lz
 
 ifdef DEBUG
-CFLAGS += -DDEBUG
+CFLAGS += -DDEBUG -g
 endif
 
 all: $(GSDNS_BIN) $(GSGENKEN_BIN) $(GSRED_BIN) $(GSSOCKS5_BIN) $(GSSERVER_BIN)
