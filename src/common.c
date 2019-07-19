@@ -262,6 +262,7 @@ int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char ist
     char *tbuf;
     int tlen;
     __header_t header;
+    uint32_t crc32_c = CRC32(s->aes_key, GS_AES_KEY_LEN / 8);
     int headerlen = GS_AES_ENCODE_LEN(sizeof(__header_t));
     if(s->len == 0)
     {
@@ -286,6 +287,8 @@ int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char ist
         aes_decode((unsigned char *) tbuf, sizeof(__header_t), (unsigned char *) &header, s->aes_key);
         reverse((char *) &header.data_total_len, sizeof(uint32_t));
         reverse((char *) &header.data_len, sizeof(uint32_t));
+        if(header.crc32 != crc32_c)
+            return 1;
         if(header.data_total_len < GS_AES_ENCODE_LEN(header.data_len))
             return 1;
         if(tlen < headerlen + header.data_total_len)

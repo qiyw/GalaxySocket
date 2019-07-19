@@ -418,7 +418,14 @@ int pp_tcp_accept(pp_tcp_t *server, pp_tcp_t *client)
         return 1;
     socket_t fd = accept(server->fd, (struct sockaddr *) &client->addr, &s);
     if(fd <= 0)
+    {
+        ((pp_socket_t *) server)->handling = 0;
+        ev.data.fd = server->fd;
+        ev.data.ptr = server;
+        ev.events = EPOLL_ENEVTS;
+        epoll_ctl(server->loop->epfd, EPOLL_CTL_MOD, server->fd, &ev);
         return 1;
+    }
     if(__set_non_blocking(fd) != 0)
         return 1;
     client->fd = fd;
@@ -633,6 +640,7 @@ int pp_loop_run(pp_loop_t *loop)
         return 1;
     for(;;)
     {
+        pthread_mutex_lock(&loop->lock);
         s = loop->header;
         p = NULL;
         while(s != NULL)
@@ -666,14 +674,18 @@ int pp_loop_run(pp_loop_t *loop)
                 }
                 if(type != PP_TYPE_UDP_FAKE)
                 {
-                    shutdown(fd, SHUT_RDWR);
-                    close(fd);
+                    if(fd > 0)
+                    {
+                        shutdown(fd, SHUT_RDWR);
+                        close(fd);
+                    }
                 }
                 continue;
             }
             p = s;
             s = s->next;
         }
+        pthread_mutex_unlock(&loop->lock);
         wait_count = epoll_wait(loop->epfd, events, MAX_THREAD, EPOLL_TIMEOUT);
         for(int i = 0 ; i < wait_count; i++)
         {

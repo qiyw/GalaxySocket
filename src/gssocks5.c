@@ -125,8 +125,8 @@ static int __tcp_connect(pp_tcp_t *srv)
     memset(tcp->data, 0, sizeof(char));
     if(pp_tcp_accept(srv, (pp_tcp_t *) tcp) != 0)
     {
-        LOG_ERR("accept failed\n");
-        free(tcp);
+        LOG_ERR("accept failed: %s\n", strerror(errno));
+        pp_close((pp_socket_t *) tcp);
         return 1;
     }
     pp_tcp_read_start((pp_tcp_t *) tcp, __tcp_srv_read);
