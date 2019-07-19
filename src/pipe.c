@@ -6,10 +6,12 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/epoll.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <time.h>
 #include <stdio.h>
@@ -18,9 +20,11 @@
 #define SOCKET_LAZY_INIT -10
 #define SOCKET_NULL -20
 #define MAX_LISTEN 128
-#define SELECT_TIMEOUT 50000
+#define EPOLL_TIMEOUT 500
 #define SOCKET_TIMEOUT 5
 #define MAX_THREAD 30
+
+#define EPOLL_ENEVTS EPOLLIN | EPOLLONESHOT
 
 struct pp_loop_s
 {
@@ -28,160 +32,209 @@ struct pp_loop_s
     pp_socket_t *last;
     tpool_t *tpool;
     pthread_mutex_t lock;
-    int count;
+    int epfd;
 };
 
-static struct pp_loop_array_s
+typedef struct
 {
-    int len;
-    pp_loop_t **loops;
-    pthread_mutex_t lock;
-} __loop_array;
+    pp_socket_t *s;
+    pp_socket_t *udp_srv;
+    char *buf;
+    int size;
+    struct msghdr *msg;
+} __thread_param_t;
 
-static void __sighandler(int signum)
+static void *__thread_read_handle(void *args)
 {
-    while(__loop_array.len--)
+    struct epoll_event ev;
+    __thread_param_t *parm = (__thread_param_t *) args;
+    if(parm->s->type == PP_TYPE_TCP)
     {
-        pp_loop_t *loop = __loop_array.loops[__loop_array.len];
-        if(loop->header == NULL)
-            continue;
-        for(pp_socket_t *s = loop->header; s != NULL; s = s->next)
+        if(((pp_tcp_read_f) parm->s->read_cb)((pp_tcp_t *) parm->s, parm->buf, parm->size) != 0)
         {
-            if(s->active != PP_ACTIVE_CLOSE && s->type != PP_TYPE_UDP_FAKE && s->fd > 0)
+            pp_close(parm->s);
+        }
+        else
+        {
+            ev.data.fd = parm->s->fd;
+            ev.data.ptr = parm->s;
+            ev.events = EPOLL_ENEVTS;
+            epoll_ctl(parm->s->loop->epfd, EPOLL_CTL_MOD, parm->s->fd, &ev);
+        }
+        parm->s->handling = 0;
+        free(parm->buf);
+        free(parm);
+    }
+    else
+    {
+        if(((pp_udp_read_f) parm->s->read_cb)((pp_tcp_t *) parm->s, parm->msg, parm->buf, parm->size) != 0)
+        {
+            pp_close(parm->s);
+        }
+        else
+        {
+            if(parm->s->type != PP_TYPE_UDP_FAKE)
             {
-                shutdown(s->fd, SHUT_RDWR);
-                close(s->fd);
+                ev.data.fd = parm->s->fd;
+                ev.data.ptr = parm->s;
+                ev.events = EPOLL_ENEVTS;
+                epoll_ctl(parm->s->loop->epfd, EPOLL_CTL_MOD, parm->s->fd, &ev);
+            }
+            else
+            {
+                ev.data.fd = parm->udp_srv->fd;
+                ev.data.ptr = parm->udp_srv;
+                ev.events = EPOLL_ENEVTS;
+                epoll_ctl(parm->udp_srv->loop->epfd, EPOLL_CTL_MOD, parm->udp_srv->fd, &ev);
             }
         }
+        parm->s->handling = 0;
+        free(parm->msg->msg_iov);
+        free(parm->msg->msg_control);
+        free(parm->msg);
+        free(parm->buf);
+        free(parm);
     }
-    exit(0);
-}
-
-static void __add_loop(pp_loop_t *loop)
-{
-    pthread_mutex_lock(&__loop_array.lock);
-    if(__loop_array.len == 0)
-        __loop_array.loops = (pp_loop_t **) malloc(sizeof(pp_loop_t *));
-    else
-        __loop_array.loops = (pp_loop_t **) realloc(__loop_array.loops, sizeof(pp_loop_t *) * (__loop_array.len + 1));
-    __loop_array.loops[__loop_array.len] = loop;
-    __loop_array.len++;
-    pthread_mutex_unlock(&__loop_array.lock);
-}
-
-static void *__thread_udp_read(void *args)
-{
-    pp_udp_t *client = (pp_udp_t *) ((void **) args)[0];
-    struct msghdr *msg = (struct msghdr *) ((void **) args)[1];
-    char *buf = (char *) ((void **) args)[2];
-    int *len = (int *) ((void **) args)[3];
-    if(((pp_udp_read_f) client->read_cb)((pp_udp_t *) client, msg, buf, *len) != 0)
-        pp_close((pp_socket_t *) client);
-    free(args);
-    free(len);
-    free(buf);
-    free(msg->msg_iov);
-    free(msg->msg_control);
-    free(msg);
     return NULL;
 }
 
-static void *__thread_handle(void *args)
+static void *__thread_connect_handle(void *args)
 {
+    struct epoll_event ev;
+    struct sockaddr_storage addr;
+    unsigned int addrl = sizeof(addr);
     pp_socket_t *s = (pp_socket_t *) args;
-    char buf[PP_BUFFER_SIZE];
+    ((pp_tcp_connect_f) s->conn_cb)((pp_tcp_t *) s);
+    if(s->handling == 1)
+    {
+        accept(s->fd, (struct sockaddr *) &addr, &addrl);
+        printf("WARNING: you should accept socket in connect call back!\n");
+        s->handling = 0;
+        ev.data.fd = s->fd;
+        ev.data.ptr = s;
+        ev.events = EPOLL_ENEVTS;
+        epoll_ctl(s->loop->epfd, EPOLL_CTL_MOD, s->fd, &ev);
+    }
+    return NULL;
+}
+
+static void __socket_handle(pp_socket_t *s)
+{
+    __thread_param_t *parm;
+    char *buf;
     int read;
     if(s->type == PP_TYPE_TCP)
     {
         if(s->is_srv == 1)
         {
-            ((pp_tcp_connect_f) s->conn_cb)((pp_tcp_t *) s);
+            s->handling = 1;
+            if(tpool_add_task(s->loop->tpool, __thread_connect_handle, (void *) s) != 0)
+                abort();
         }
         else
         {
+            buf = (char *) malloc(sizeof(char) * PP_BUFFER_SIZE);
             read = recv(s->fd, buf, PP_BUFFER_SIZE, MSG_NOSIGNAL);
             if(read <= 0)
             {
+                free(buf);
                 pp_close(s);
             }
             else
             {
-                if(((pp_tcp_read_f) s->read_cb)((pp_tcp_t *) s, buf, read) != 0)
-                    pp_close(s);
+                parm = (__thread_param_t *) malloc(sizeof(__thread_param_t));
+                parm->s = s;
+                parm->buf = buf;
+                parm->size = read;
+                s->handling = 1;
+                if(tpool_add_task(s->loop->tpool, __thread_read_handle, (void *) parm) != 0)
+                    abort();
             }
         }
     }
     else
     {
+        buf = (char *) malloc(sizeof(char) * PP_BUFFER_SIZE);
         struct msghdr *msg = (struct msghdr *) malloc(sizeof(struct msghdr));
-        char cntrlbuf[64];
+        char *cntrlbuf = (char *) malloc(sizeof(char) * 64);
         struct iovec *iov = (struct iovec *) malloc(sizeof(struct iovec));
         memset(cntrlbuf, '\0', 64);
         struct sockaddr_storage addr;
+        msg->msg_control = cntrlbuf;
+        msg->msg_controllen = 64;
+        iov[0].iov_base = buf;
+        iov[0].iov_len = PP_BUFFER_SIZE;
+        msg->msg_iov = iov;
+        msg->msg_iovlen = 1;
         pp_socket_t *client = NULL;
         if(s->is_srv == 1)
         {
             if(((pp_udp_accept_f) s->conn_cb)((pp_udp_t *) s, (pp_udp_t **) &client) == 0 && client != NULL)
             {
-                char *tbuf = (char *) malloc(sizeof(char) * PP_BUFFER_SIZE);
-                int *tread = (int *) malloc(sizeof(int));
-                char *tcntrlbuf = (char *) malloc(sizeof(char) * 64);
                 client->type = PP_TYPE_UDP_FAKE;
                 client->fd = s->fd;
                 client->udp_timeout = time(NULL);
+
                 msg->msg_name = &client->addr;
                 msg->msg_namelen = sizeof(struct sockaddr_storage);
-                msg->msg_control = tcntrlbuf;
-                msg->msg_controllen = 64;
-                iov[0].iov_base = tbuf;
-                iov[0].iov_len = PP_BUFFER_SIZE;
-                msg->msg_iov = iov;
-                msg->msg_iovlen = 1;
-                *tread = recvmsg(client->fd, msg, 0);
-                if(*tread <= 0)
+
+                read = recvmsg(client->fd, msg, 0);
+                if(read <= 0)
                 {
                     pp_close(client);
+                    free(iov);
+                    free(cntrlbuf);
+                    free(msg);
+                    free(buf);
                 }
                 else
                 {
+                    parm = (__thread_param_t *) malloc(sizeof(__thread_param_t));
+                    parm->msg = msg;
+                    parm->buf = buf;
+                    parm->s = client;
+                    parm->udp_srv = s;
+                    parm->size = read;
                     client->read_cb = s->read_cb;
-                    void **args = malloc(sizeof(void *) * 4);
-                    args[0] = client;
-                    args[1] = msg;
-                    args[2] = tbuf;
-                    args[3] = tread;
-                    if(tpool_add_task(client->loop->tpool, __thread_udp_read, (void *) args) != 0)
+                    client->handling = 1;
+                    if(tpool_add_task(s->loop->tpool, __thread_read_handle, (void *) parm) != 0)
                         abort();
                 }
+            }
+            else
+            {
+                free(iov);
+                free(cntrlbuf);
+                free(msg);
+                free(buf);
             }
         }
         else
         {
-            client = s;
             msg->msg_name = &addr;
             msg->msg_namelen = sizeof(struct sockaddr_storage);
-            msg->msg_control = cntrlbuf;
-            msg->msg_controllen = 64;
-            iov[0].iov_base = buf;
-            iov[0].iov_len = PP_BUFFER_SIZE;
-            msg->msg_iov = iov;
-            msg->msg_iovlen = 1;
-            read = recvmsg(client->fd, msg, 0);
+            read = recvmsg(s->fd, msg, 0);
             if(read <= 0)
             {
-                pp_close(client);
+                pp_close(s);
+                free(iov);
+                free(cntrlbuf);
+                free(msg);
+                free(buf);
             }
             else
             {
-                if(((pp_udp_read_f) s->read_cb)((pp_udp_t *) client, msg, buf, read) != 0)
-                    pp_close(client);
+                parm = (__thread_param_t *) malloc(sizeof(__thread_param_t));
+                parm->msg = msg;
+                parm->buf = buf;
+                parm->s = s;
+                parm->size = read;
+                s->handling = 1;
+                if(tpool_add_task(s->loop->tpool, __thread_read_handle, (void *) parm) != 0)
+                    abort();
             }
-            free(iov);
-            free(msg);
         }
     }
-    s->handling = 0;
-    return NULL;
 }
 
 static int __set_timeout(socket_t fd)
@@ -193,11 +246,28 @@ static int __set_timeout(socket_t fd)
     return setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (char *) &timeout, sizeof(timeout));
 }
 
+static int __set_reuseaddr(socket_t fd)
+{
+    int on = 1;
+    return setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+}
+
+static int __set_non_blocking(socket_t fd)
+{
+//     int flags;
+//     flags = fcntl(fd, F_GETFL, 0);
+//     if(flags == -1)
+//         return -1;
+//     flags |= O_NONBLOCK;
+//     if(fcntl(fd, F_SETFL, flags) == -1)
+//         return -1;
+    return 0;
+}
+
 pp_loop_t *pp_loop_init()
 {
     pp_loop_t *loop = (pp_loop_t *) malloc(sizeof(pp_loop_t));
     loop->header = NULL;
-    loop->count = 0;
     if(pthread_mutex_init(&loop->lock, NULL) != 0)
     {
         free(loop);
@@ -205,6 +275,12 @@ pp_loop_t *pp_loop_init()
     }
     loop->tpool = tpool_create(MAX_THREAD);
     if(loop->tpool == NULL)
+    {
+        free(loop);
+        return NULL;
+    }
+    loop->epfd = epoll_create1(0);
+    if(loop->epfd < 0)
     {
         free(loop);
         return NULL;
@@ -225,7 +301,6 @@ int pp_tcp_init(pp_loop_t *loop, pp_tcp_t *tcp, pp_closing_f cb)
         loop->last->next = (pp_socket_t *) tcp;
         loop->last = (pp_socket_t *) tcp;
     }
-    loop->count++;
     pthread_mutex_unlock(&loop->lock);
     tcp->loop = loop;
     tcp->pipe_target = NULL;
@@ -268,11 +343,16 @@ int pp_tcp_bind(pp_tcp_t *tcp, struct sockaddr *addr, int flags)
             return 1;
         memcpy(&tcp->addr, addr, sizeof(struct sockaddr_in));
     }
+    if(__set_reuseaddr(tcp->fd) != 0)
+        return 1;
+    if(__set_non_blocking(tcp->fd) != 0)
+        return 1;
     return 0;
 }
 
 int pp_tcp_listen(pp_tcp_t *tcp, pp_tcp_connect_f cb)
 {
+    struct epoll_event ev;
     int qlen = 5;
     int rtn = listen(tcp->fd, MAX_LISTEN);
     if(rtn != 0)
@@ -282,6 +362,10 @@ int pp_tcp_listen(pp_tcp_t *tcp, pp_tcp_connect_f cb)
     tcp->is_srv = 1;
     tcp->conn_cb = cb;
     tcp->active = PP_ACTIVE_EVENT;
+    ev.data.fd = tcp->fd;
+    ev.data.ptr = tcp;
+    ev.events = EPOLL_ENEVTS;
+    epoll_ctl(tcp->loop->epfd, EPOLL_CTL_ADD, tcp->fd, &ev);
     return 0;
 }
 
@@ -291,6 +375,8 @@ int pp_tcp_connect(pp_tcp_t *tcp, struct sockaddr *addr)
         return 1;
     tcp->fd = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP);
     if(tcp->fd <= 0)
+        return 1;
+    if(__set_non_blocking(tcp->fd) != 0)
         return 1;
     __set_timeout(tcp->fd);
     if(addr->sa_family == AF_INET6)
@@ -310,32 +396,37 @@ int pp_tcp_connect(pp_tcp_t *tcp, struct sockaddr *addr)
 
 int pp_tcp_read_start(pp_tcp_t *tcp, pp_tcp_read_f cb)
 {
+    struct epoll_event ev;
     if(tcp->is_srv == 1)
         return 1;
     if(tcp->fd <= 0)
         return 1;
     tcp->read_cb = cb;
     tcp->active = PP_ACTIVE_EVENT;
-    if(tcp->is_srv == 2 && tcp->handling == 0)
-    {
-        tcp->handling = 1;
-        if(tpool_add_task(tcp->loop->tpool, __thread_handle, (void *) tcp) != 0)
-            abort();
-    }
+    ev.data.fd = tcp->fd;
+    ev.data.ptr = tcp;
+    ev.events = EPOLL_ENEVTS;
+    epoll_ctl(tcp->loop->epfd, EPOLL_CTL_ADD, tcp->fd, &ev);
     return 0;
 }
 
 int pp_tcp_accept(pp_tcp_t *server, pp_tcp_t *client)
 {
+    struct epoll_event ev;
     unsigned int s = sizeof(client->addr);
     if(client->is_srv != 0)
         return 1;
     socket_t fd = accept(server->fd, (struct sockaddr *) &client->addr, &s);
     if(fd <= 0)
         return 1;
+    if(__set_non_blocking(fd) != 0)
+        return 1;
     client->fd = fd;
-    client->is_srv = 2;
     ((pp_socket_t *) server)->handling = 0;
+    ev.data.fd = server->fd;
+    ev.data.ptr = server;
+    ev.events = EPOLL_ENEVTS;
+    epoll_ctl(server->loop->epfd, EPOLL_CTL_MOD, server->fd, &ev);
     return 0;
 }
 
@@ -350,6 +441,8 @@ int pp_tcp_fast_write(pp_tcp_t *tcp, struct sockaddr *addr, __const__ char *buf,
         return 1;
     tcp->fd = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP);
     if(tcp->fd <= 0)
+        return 1;
+    if(__set_non_blocking(tcp->fd) != 0)
         return 1;
     __set_timeout(tcp->fd);
     if(addr->sa_family == AF_INET6)
@@ -396,7 +489,6 @@ int pp_udp_init(pp_loop_t *loop, pp_udp_t *udp, pp_closing_f cb)
         loop->last->next = (pp_socket_t *) udp;
         loop->last = (pp_socket_t *) udp;
     }
-    loop->count++;
     pthread_mutex_unlock(&loop->lock);
     udp->loop = loop;
     udp->pipe_target = NULL;
@@ -455,15 +547,24 @@ int pp_udp_bind(pp_udp_t *udp, struct sockaddr *addr, int flags)
             return 1;
         memcpy(&udp->addr, addr, sizeof(struct sockaddr_in));
     }
+    if(__set_reuseaddr(udp->fd) != 0)
+        return 1;
+    if(__set_non_blocking(udp->fd) != 0)
+        return 1;
     return 0;
 }
 
 int pp_udp_listen(pp_udp_t *udp, pp_udp_accept_f cb, pp_udp_read_f rcb)
 {
+    struct epoll_event ev;
     udp->is_srv = 1;
     udp->conn_cb = cb;
     udp->read_cb = rcb;
     udp->active = PP_ACTIVE_EVENT;
+    ev.data.fd = udp->fd;
+    ev.data.ptr = udp;
+    ev.events = EPOLL_ENEVTS;
+    epoll_ctl(udp->loop->epfd, EPOLL_CTL_ADD, udp->fd, &ev);
     return 0;
 }
 
@@ -473,6 +574,8 @@ int pp_udp_connect(pp_udp_t *udp, struct sockaddr *addr)
         return 1;
     udp->fd = socket(addr->sa_family, SOCK_DGRAM, IPPROTO_UDP);
     if(udp->fd <= 0)
+        return 1;
+    if(__set_non_blocking(udp->fd) != 0)
         return 1;
     __set_timeout(udp->fd);
     if(addr->sa_family == AF_INET6)
@@ -488,10 +591,15 @@ int pp_udp_connect(pp_udp_t *udp, struct sockaddr *addr)
 
 int pp_udp_read_start(pp_udp_t *udp, pp_udp_read_f cb)
 {
+    struct epoll_event ev;
     if(udp->fd <= 0)
         return 1;
     udp->read_cb = cb;
     udp->active = PP_ACTIVE_EVENT;
+    ev.data.fd = udp->fd;
+    ev.data.ptr = udp;
+    ev.events = EPOLL_ENEVTS;
+    epoll_ctl(udp->loop->epfd, EPOLL_CTL_ADD, udp->fd, &ev);
     return 0;
 }
 
@@ -518,34 +626,13 @@ int pp_udp_pipe_write(pp_udp_t *udp, __const__ char *buf, __const__ int len)
 
 int pp_loop_run(pp_loop_t *loop)
 {
-    fd_set fs;
-    socket_t max_fd;
-    int selrtn;
-    struct timeval timeout;
-    pp_socket_t **sock_lst;
-    pp_socket_t **sock_lst_tmp;
     pp_socket_t *s, *p;
-    static char shf = 0;
+    struct epoll_event events[MAX_THREAD];
+    int wait_count;
     if(loop->header == NULL)
         return 1;
-    if(shf == 0)
+    for(;;)
     {
-        signal(SIGINT, __sighandler);
-        signal(SIGTERM, __sighandler);
-        pthread_mutex_init(&__loop_array.lock, NULL);
-        __loop_array.len = 0;
-        shf = 1;
-    }
-    __add_loop(loop);
-    while(1)
-    {
-        FD_ZERO(&fs);
-        max_fd = 0;
-        timeout.tv_sec = 0;
-        timeout.tv_usec = SELECT_TIMEOUT;
-        pthread_mutex_lock(&loop->lock);
-        sock_lst = malloc(sizeof(pp_socket_t *) * (loop->count + 1));
-        sock_lst_tmp = sock_lst;
         s = loop->header;
         p = NULL;
         while(s != NULL)
@@ -582,57 +669,21 @@ int pp_loop_run(pp_loop_t *loop)
                     shutdown(fd, SHUT_RDWR);
                     close(fd);
                 }
-                loop->count--;
                 continue;
-            }
-            if(s->active == PP_ACTIVE_EVENT && s->handling == 0 && s->type != PP_TYPE_UDP_FAKE)
-            {
-                if(s->pipe_target == NULL || s->pipe_target->active != PP_ACTIVE_CLOSE)
-                {
-                    if(s->fd > max_fd)
-                        max_fd = s->fd;
-                    FD_SET(s->fd, &fs);
-                    *sock_lst_tmp++ = s;
-                }
-            }
-            if(s->type == PP_TYPE_UDP_FAKE)
-            {
-                if(difftime(time(NULL), s->udp_timeout) > SOCKET_TIMEOUT)
-                    pp_close(s);
             }
             p = s;
             s = s->next;
         }
-        *sock_lst_tmp = NULL;
-        pthread_mutex_unlock(&loop->lock);
-        if(max_fd != 0)
+        wait_count = epoll_wait(loop->epfd, events, MAX_THREAD, EPOLL_TIMEOUT);
+        for(int i = 0 ; i < wait_count; i++)
         {
-            selrtn = select(max_fd + 1, &fs, NULL, NULL, &timeout);
-            switch(selrtn)
-            {
-                case -1:
-                    return 1;
-                case 0:
-                    break;
-                default:
-                    sock_lst_tmp = sock_lst;
-                    while((s = *sock_lst_tmp++) != NULL)
-                    {
-                        if(FD_ISSET(s->fd, &fs))
-                        {
-                            s->handling = 1;
-                            if(tpool_add_task(loop->tpool, __thread_handle, (void *) s) != 0)
-                                abort();
-                        }
-                    }
-                    break;
+            uint32_t events_flags = events[i].events;
+            if ( events_flags & EPOLLERR || events_flags & EPOLLHUP || (! events_flags & EPOLLIN)) {
+                pp_close((pp_socket_t *) events[i].data.ptr);
+                continue;
             }
+            __socket_handle((pp_socket_t *) events[i].data.ptr);
         }
-        else
-        {
-            usleep(SELECT_TIMEOUT);
-        }
-        free(sock_lst);
     }
     return 0;
 }

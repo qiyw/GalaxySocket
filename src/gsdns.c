@@ -192,8 +192,8 @@ static int __tcp_srv_read(pp_tcp_t *srv, __const__ char *buf, __const__ int len)
     gs_enc_data(buf, len, &resbuf, &reslen, 0, ((gs_socket_t *) srv)->aes_key);
     int sts = pp_tcp_pipe_write(srv, resbuf, reslen);
     free(resbuf);
-    return sts;
     LOG_DEBUG("__tcp_srv_read end\n");
+    return sts;
 }
 
 static int __tcp_clnt_read(pp_tcp_t *clnt, __const__ char *buf, __const__ int len)
