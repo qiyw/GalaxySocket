@@ -26,7 +26,9 @@ typedef struct pp_socket_s pp_udp_t;
 
 typedef int socket_t;
 
-typedef int (*pp_tcp_connect_f)(pp_tcp_t *srv);
+typedef int (*pp_tcp_accepting_f)(pp_tcp_t *srv, pp_tcp_t **);
+
+typedef int (*pp_tcp_accepted_f)(pp_tcp_t *);
 
 typedef int (*pp_tcp_read_f)(pp_tcp_t *, __const__ char *, __const__ int);
 
@@ -48,7 +50,8 @@ struct pp_socket_s
     char is_srv;
     char handling;
     char active;
-    void *conn_cb;
+    void *accepting_cb;
+    void *accepted_cb;
     void *read_cb;
     pp_closing_f close_cb;
 };
@@ -59,13 +62,13 @@ int pp_tcp_init(pp_loop_t *loop, pp_tcp_t *tcp, pp_closing_f cb);
 
 int pp_tcp_bind(pp_tcp_t *tcp, struct sockaddr *addr, int flags);
 
-int pp_tcp_listen(pp_tcp_t *tcp, pp_tcp_connect_f cb);
+int pp_tcp_listen(pp_tcp_t *tcp, pp_tcp_accepting_f cb, pp_tcp_accepted_f rcb);
 
 int pp_tcp_connect(pp_tcp_t *tcp, struct sockaddr *addr);
 
 int pp_tcp_read_start(pp_tcp_t *tcp, pp_tcp_read_f cb);
 
-int pp_tcp_accept(pp_tcp_t *server, pp_tcp_t *client);
+// int pp_tcp_accept(pp_tcp_t *server, pp_tcp_t *client);
 
 int pp_tcp_pipe_bind(pp_tcp_t *stcp, pp_tcp_t *ttcp);
 

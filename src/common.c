@@ -39,9 +39,25 @@ static struct addrinfo *__gethostbyname(__const__ char *hostname)
     return result;
 }
 
-static int __udp_accepted(pp_udp_t *srv, pp_udp_t **client)
+static int __tcp_accepting(pp_tcp_t *srv, pp_tcp_t **client)
 {
-    LOG_DEBUG("__udp_accepted start\n");
+    LOG_DEBUG("__tcp_accepting start\n");
+    *client = (pp_tcp_t *) malloc(sizeof(gs_tcp_t));
+    memset(*client, '\0', sizeof(gs_tcp_t));
+    gs_tcp_t *tcp = (gs_tcp_t *) *client;
+    tcp->aes_key = ((gs_tcp_t *) srv)->aes_key;
+    tcp->crc32 = ((gs_tcp_t *) srv)->crc32;
+    tcp->seraddr = ((gs_tcp_t *) srv)->seraddr;
+    tcp->dnsaddr = ((gs_tcp_t *) srv)->dnsaddr;
+    tcp->data = NULL;
+    pp_tcp_init(pp_get_loop((pp_socket_t *) srv), *client, closing);
+    LOG_DEBUG("__tcp_accepting end\n");
+    return 0;
+}
+
+static int __udp_accepting(pp_udp_t *srv, pp_udp_t **client)
+{
+    LOG_DEBUG("__udp_accepting start\n");
     *client = (pp_udp_t *) malloc(sizeof(gs_udp_t));
     memset(*client, '\0', sizeof(gs_udp_t));
     gs_udp_t *udp = (gs_udp_t *) *client;
@@ -51,11 +67,11 @@ static int __udp_accepted(pp_udp_t *srv, pp_udp_t **client)
     udp->dnsaddr = ((gs_udp_t *) srv)->dnsaddr;
     udp->data = NULL;
     pp_udp_init(pp_get_loop((pp_socket_t *) srv), *client, closing);
-    LOG_DEBUG("__udp_accepted end\n");
+    LOG_DEBUG("__udp_accepting end\n");
     return 0;
 }
 
-static int __do_tcp_bind(struct sockaddr *addr, struct bind_args *ba, pp_tcp_connect_f cb, int flags)
+static int __do_tcp_bind(struct sockaddr *addr, struct bind_args *ba, pp_tcp_accepted_f cb, int flags)
 {
     LOG_DEBUG("__do_tcp_bind start\n");
     gs_tcp_t *tcp = (gs_tcp_t *) malloc(sizeof(gs_tcp_t));
@@ -75,7 +91,7 @@ static int __do_tcp_bind(struct sockaddr *addr, struct bind_args *ba, pp_tcp_con
         LOG_ERR("tcp bind failed\n");
         return 1;
     }
-    if(pp_tcp_listen((pp_tcp_t *) tcp, cb))
+    if(pp_tcp_listen((pp_tcp_t *) tcp, __tcp_accepting, cb))
     {
         LOG_ERR("tcp listen failed\n");
         return 1;
@@ -104,7 +120,7 @@ static int __do_udp_bind(struct sockaddr *addr, struct bind_args *ba, pp_udp_rea
         LOG_ERR("udp bind failed\n");
         return 1;
     }
-    if(pp_udp_listen((pp_udp_t *) udp, __udp_accepted, cb))
+    if(pp_udp_listen((pp_udp_t *) udp, __udp_accepting, cb))
     {
         LOG_ERR("udp listen failed\n");
         return 1;
@@ -113,7 +129,7 @@ static int __do_udp_bind(struct sockaddr *addr, struct bind_args *ba, pp_udp_rea
     return 0;
 }
 
-int do_bind(char *host6, char *host4, int port, pp_loop_t *loop, unsigned char *aes_key, uint32_t crc32, struct sockaddr* seraddr, struct sockaddr* dnsaddr, void *data, int tcp_flags, int udp_flags, pp_tcp_connect_f tcp_cb, pp_udp_read_f udp_cb)
+int do_bind(char *host6, char *host4, int port, pp_loop_t *loop, unsigned char *aes_key, uint32_t crc32, struct sockaddr* seraddr, struct sockaddr* dnsaddr, void *data, int tcp_flags, int udp_flags, pp_tcp_accepted_f tcp_cb, pp_udp_read_f udp_cb)
 {
     LOG_DEBUG("do_bind start\n");
     struct sockaddr_in6 addr6;
@@ -181,8 +197,8 @@ int closing(pp_socket_t *s)
     if(gs->len != 0)
         free(gs->buf);
     free(gs);
-    return 0;
     LOG_DEBUG("closing end\n");
+    return 0;
 }
 
 void chrswt(char *a, char *b)

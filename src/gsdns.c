@@ -112,30 +112,12 @@ int main(int argc, char** argv)
 static int __tcp_connect(pp_tcp_t *srv)
 {
     LOG_DEBUG("__tcp_connect start\n");
-    gs_tcp_t *tcp = (gs_tcp_t *) malloc(sizeof(gs_tcp_t));
-    memset(tcp, '\0', sizeof(gs_tcp_t));
     struct sockaddr_in *addr4;
     struct sockaddr_in6 *addr6;
     int restmplen;
     char *restmpbuf;
     char *resbuf;
     int reslen;
-    if(pp_tcp_init(pp_get_loop((pp_socket_t *) srv), (pp_tcp_t *) tcp, closing) != 0)
-    {
-        LOG_ERR("init socket failed\n");
-        return 1;
-    }
-    tcp->aes_key = ((gs_tcp_t *) srv)->aes_key;
-    tcp->crc32 = ((gs_tcp_t *) srv)->crc32;
-    tcp->seraddr = ((gs_tcp_t *) srv)->seraddr;
-    tcp->dnsaddr = ((gs_tcp_t *) srv)->dnsaddr;
-    tcp->data = NULL;
-    if(pp_tcp_accept(srv, (pp_tcp_t *) tcp) != 0)
-    {
-        LOG_ERR("accept failed\n");
-        free(tcp);
-        return 1;
-    }
     gs_tcp_t *client = (gs_tcp_t *) malloc(sizeof(gs_tcp_t));
     memset(client, '\0', sizeof(gs_tcp_t));
     if(pp_tcp_init(pp_get_loop((pp_socket_t *) srv), (pp_tcp_t *) client, closing) != 0)
@@ -172,12 +154,12 @@ static int __tcp_connect(pp_tcp_t *srv)
     free(resbuf);
     if(sts == 0)
     {
-        pp_tcp_pipe_bind((pp_tcp_t *) tcp, (pp_tcp_t *) client);
+        pp_tcp_pipe_bind((pp_tcp_t *) srv, (pp_tcp_t *) client);
         pp_tcp_read_start((pp_tcp_t *) client, __tcp_clnt_read);
     }
     else
     {
-        pp_close((pp_tcp_t *) tcp);
+        pp_close((pp_tcp_t *) srv);
         pp_close((pp_tcp_t *) client);
     }
     LOG_DEBUG("__tcp_connect end\n");

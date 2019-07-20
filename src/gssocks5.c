@@ -111,25 +111,9 @@ int main(int argc, char** argv)
 static int __tcp_connect(pp_tcp_t *srv)
 {
     LOG_DEBUG("__tcp_connect start\n");
-    gs_tcp_t *tcp = (gs_tcp_t *) malloc(sizeof(gs_tcp_t));
-    memset(tcp, '\0', sizeof(gs_tcp_t));
-    if(pp_tcp_init(pp_get_loop((pp_socket_t *) srv), (pp_tcp_t *) tcp, closing) != 0)
-    {
-        LOG_ERR("init socket failed\n");
-        return 1;
-    }
-    tcp->aes_key = ((gs_tcp_t *) srv)->aes_key;
-    tcp->crc32 = ((gs_tcp_t *) srv)->crc32;
-    tcp->seraddr = ((gs_tcp_t *) srv)->seraddr;
-    tcp->data = malloc(sizeof(char));
-    memset(tcp->data, 0, sizeof(char));
-    if(pp_tcp_accept(srv, (pp_tcp_t *) tcp) != 0)
-    {
-        LOG_ERR("accept failed: %s\n", strerror(errno));
-        pp_close((pp_socket_t *) tcp);
-        return 1;
-    }
-    pp_tcp_read_start((pp_tcp_t *) tcp, __tcp_srv_read);
+    ((gs_tcp_t *) srv)->data = malloc(sizeof(char));
+    memset(((gs_tcp_t *) srv)->data, '\0', sizeof(char));
+    pp_tcp_read_start((pp_tcp_t *) srv, __tcp_srv_read);
     LOG_DEBUG("__tcp_connect end\n");
     return 0;
 }
