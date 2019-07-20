@@ -303,10 +303,18 @@ int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char ist
         aes_decode((unsigned char *) tbuf, sizeof(__header_t), (unsigned char *) &header, s->aes_key);
         reverse((char *) &header.data_total_len, sizeof(uint32_t));
         reverse((char *) &header.data_len, sizeof(uint32_t));
-        if(header.crc32 != crc32_c)
-            return 1;
-        if(header.data_total_len < GS_AES_ENCODE_LEN(header.data_len))
-            return 1;
+        if(header.crc32 != crc32_c || header.data_total_len < GS_AES_ENCODE_LEN(header.data_len))
+        {
+            if(istcp)
+            {
+                return 1;
+            }
+            else
+            {
+                tlen = 0;
+                break;
+            }
+        }
         if(tlen < headerlen + header.data_total_len)
             break;
         char *ucdata;

@@ -35,7 +35,6 @@ struct pp_loop_s
     tpool_t *tpool;
     pthread_mutex_t lock;
     int epfd;
-    time_t close_time;
 };
 
 typedef struct
@@ -678,14 +677,9 @@ int pp_loop_run(pp_loop_t *loop)
     int wait_count;
     if(loop->header == NULL)
         return 1;
-    loop->close_time = time(NULL);
     for(;;)
     {
-        if(difftime(time(NULL), loop->close_time) > CLOSE_TIMEOUT)
-        {
-            __socket_close_event(loop);
-            loop->close_time = time(NULL);
-        }
+        __socket_close_event(loop);
         wait_count = epoll_wait(loop->epfd, events, MAX_THREAD, EPOLL_TIMEOUT);
         for(int i = 0 ; i < wait_count; i++)
         {
