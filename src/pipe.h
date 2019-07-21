@@ -13,7 +13,7 @@
 #define PP_TYPE_UDP 2
 #define PP_TYPE_UDP_FAKE 3
 
-#define PP_ACTIVE_CLOSE -1
+#define PP_ACTIVE_CLOSE 0x0F
 #define PP_ACTIVE_NOTHING 0
 #define PP_ACTIVE_EVENT 1
 
