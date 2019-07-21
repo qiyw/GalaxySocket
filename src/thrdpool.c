@@ -114,7 +114,7 @@ tpool_t *tpool_create(__const__ int size)
     tpool->destroy = 0;
     for(int i = 0; i < size; i++)
     {
-        if(pthread_create(&tpool->tids[i], NULL, __thread_task, tpool) != 0)
+        if(pthread_create(&tpool->tids[i], &tpool->tattr, __thread_task, tpool) != 0)
         {
             free(tpool->tids);
             free(tpool->tsts);
@@ -143,7 +143,7 @@ int tpool_add_task(tpool_t *tpool, void *(*fun)(void *), void *arg)
     }
     if(isbusy)
     {
-        return pthread_create(&tid, NULL, __dynamic_thread_task, task);
+        return pthread_create(&tid, &tpool->tattr, __dynamic_thread_task, task);
     }
     else
     {
