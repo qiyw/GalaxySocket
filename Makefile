@@ -1,5 +1,5 @@
 CC ?= cc
-PREFIX ?= /usr
+PREFIX ?= /usr/local
 
 SRCDIR = src
 OBJDIR = obj
