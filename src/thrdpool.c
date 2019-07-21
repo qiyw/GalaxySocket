@@ -2,6 +2,7 @@
 
 #include <pthread.h>
 #include <stdlib.h>
+#include <limits.h>
 
 typedef struct task_s
 {
@@ -13,6 +14,7 @@ typedef struct task_s
 struct tpool_s
 {
     int tnum;
+    pthread_attr_t tattr;
     pthread_t *tids;
     char *tsts;
     pthread_mutex_t lock;
@@ -84,6 +86,27 @@ tpool_t *tpool_create(__const__ int size)
         free(tpool);
         return NULL;
     }
+    if(pthread_attr_init(&tpool->tattr) != 0)
+    {
+        free(tpool);
+        return NULL;
+    }
+    if(pthread_attr_setstacksize(&tpool->tattr, 4 * PTHREAD_STACK_MIN) != 0)
+    {
+        free(tpool);
+        return NULL;
+    }
+    if(pthread_attr_setdetachstate(&tpool->tattr, PTHREAD_CREATE_DETACHED) != 0)
+    {
+        free(tpool);
+        return NULL;
+    }
+    if(pthread_attr_destroy(&tpool->tattr) != 0)
+    {
+        free(tpool);
+        return NULL;
+    }
+
     tpool->tnum = size;
     tpool->tids = calloc(size, sizeof(pthread_t));
     tpool->tsts = calloc(size, sizeof(char));
