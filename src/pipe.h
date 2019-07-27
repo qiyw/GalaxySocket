@@ -68,6 +68,8 @@ int pp_tcp_connect(pp_tcp_t *tcp, struct sockaddr *addr);
 
 int pp_tcp_read_start(pp_tcp_t *tcp, pp_tcp_read_f cb);
 
+// int pp_tcp_accept(pp_tcp_t *server, pp_tcp_t *client);
+
 int pp_tcp_pipe_bind(pp_tcp_t *stcp, pp_tcp_t *ttcp);
 
 int pp_tcp_fast_write(pp_tcp_t *tcp, struct sockaddr *addr, __const__ char *buf, __const__ int len);
@@ -83,8 +85,6 @@ int pp_udp_bind(pp_udp_t *udp, struct sockaddr *addr, int flags);
 int pp_udp_listen(pp_udp_t *udp, pp_udp_accept_f cb, pp_udp_read_f rcb);
 
 int pp_udp_connect(pp_udp_t *udp, struct sockaddr *addr);
-
-int pp_udp_connect_ex(pp_udp_t *udp, struct sockaddr *addr, int flags);
 
 int pp_udp_read_start(pp_udp_t *udp, pp_udp_read_f cb);
 
@@ -105,7 +105,5 @@ socket_t pp_fileno(pp_socket_t *socket);
 pp_socket_t *pp_pipe_socket(pp_socket_t *socket);
 
 pp_loop_t *pp_get_loop(pp_socket_t *socket);
-
-struct sockaddr *pp_address(pp_socket_t *socket);
 
 #endif

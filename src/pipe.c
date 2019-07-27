@@ -448,6 +448,33 @@ int pp_tcp_read_start(pp_tcp_t *tcp, pp_tcp_read_f cb)
     epoll_ctl(tcp->loop->epfd, EPOLL_CTL_ADD, tcp->fd, &ev);
     return 0;
 }
+/*
+int pp_tcp_accept(pp_tcp_t *server, pp_tcp_t *client)
+{
+    struct epoll_event ev;
+    unsigned int s = sizeof(client->addr);
+    if(client->is_srv != 0)
+        return 1;
+    socket_t fd = accept(server->fd, (struct sockaddr *) &client->addr, &s);
+    if(fd <= 0)
+    {
+        ((pp_socket_t *) server)->handling = 0;
+        ev.data.fd = server->fd;
+        ev.data.ptr = server;
+        ev.events = EPOLL_ENEVTS_CLIENT;
+        epoll_ctl(server->loop->epfd, EPOLL_CTL_MOD, server->fd, &ev);
+        return 1;
+    }
+    if(__set_non_blocking(fd) != 0)
+        return 1;
+    client->fd = fd;
+    ((pp_socket_t *) server)->handling = 0;
+    ev.data.fd = server->fd;
+    ev.data.ptr = server;
+    ev.events = EPOLL_ENEVTS_CLIENT;
+    epoll_ctl(server->loop->epfd, EPOLL_CTL_MOD, server->fd, &ev);
+    return 0;
+}*/
 
 int pp_tcp_pipe_bind(pp_tcp_t *stcp, pp_tcp_t *ttcp)
 {
@@ -567,8 +594,6 @@ int pp_udp_bind(pp_udp_t *udp, struct sockaddr *addr, int flags)
             return 1;
         memcpy(&udp->addr, addr, sizeof(struct sockaddr_in));
     }
-    if(setsockopt(udp->fd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on)) != 0)
-        return 1;
     if(__set_reuseaddr(udp->fd) != 0)
         return 1;
     if(__set_non_blocking(udp->fd) != 0)
@@ -607,21 +632,6 @@ int pp_udp_connect(pp_udp_t *udp, struct sockaddr *addr)
     else
     {
         memcpy(&udp->addr, addr, sizeof(struct sockaddr_in));
-    }
-    return 0;
-}
-
-int pp_udp_connect_ex(pp_udp_t *udp, struct sockaddr *addr, int flags)
-{
-    int on;
-    int r = pp_udp_connect(udp, addr);
-    if(r != 0)
-        return r;
-    if(((flags >> 1) & 1) == 1)
-    {
-        //need root
-        if(setsockopt(udp->fd, SOL_IP, IP_TRANSPARENT, &on, sizeof(on)) != 0)
-            return 1;
     }
     return 0;
 }
@@ -719,9 +729,4 @@ pp_socket_t *pp_pipe_socket(pp_socket_t *socket)
 pp_loop_t *pp_get_loop(pp_socket_t *socket)
 {
     return socket->loop;
-}
-
-struct sockaddr *pp_address(pp_socket_t *socket)
-{
-    return (struct sockaddr *) &socket->addr;
 }

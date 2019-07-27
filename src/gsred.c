@@ -255,7 +255,7 @@ static int __udp_srv_read(pp_udp_t *srv, __const__ struct msghdr *msg, __const__
     client->seraddr = ((gs_udp_t *) srv)->seraddr;
     client->data = NULL;
     pp_udp_init(pp_get_loop((pp_socket_t *) srv), (pp_udp_t *) client, closing);
-    pp_udp_connect_ex((pp_udp_t *) client, (struct sockaddr *) client->seraddr, PP_UDP_TPROXY);
+    pp_udp_connect((pp_udp_t *) client, (struct sockaddr *) client->seraddr);
     pp_udp_pipe_bind((pp_udp_t *) client, srv);
     pp_udp_read_start((pp_udp_t *) client, __udp_clnt_read);
     if(destaddr.ss_family == AF_INET)
