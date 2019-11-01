@@ -1,20 +1,10 @@
 include Makefile.inc
 
-all: $(GSDNS_BIN) $(GSGENKEN_BIN) $(GSRED_BIN) $(GSSOCKS5_BIN) $(GSSERVER_BIN)
-
-$(GSDNS_BIN):
+all:
 	@make -f Makefile_gsdns.mk
-
-$(GSGENKEN_BIN):
 	@make -f Makefile_gsgenkey.mk
-
-$(GSRED_BIN):
 	@make -f Makefile_gsred.mk
-
-$(GSSOCKS5_BIN):
 	@make -f Makefile_gssocks5.mk
-
-$(GSSERVER_BIN):
 	@make -f Makefile_gsserver.mk
 
 clean:

@@ -299,7 +299,7 @@ int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char ist
     {
         if(tlen <= headerlen)
             break;
-        aes_decode((unsigned char *) tbuf, sizeof(__header_t), (unsigned char *) &header, s->aes_key);
+        aes_decrypt((unsigned char *) tbuf, sizeof(__header_t), (unsigned char *) &header, s->aes_key);
         reverse((char *) &header.data_total_len, sizeof(uint32_t));
         reverse((char *) &header.data_len, sizeof(uint32_t));
         if(header.crc32 != s->crc32 || header.data_total_len < GS_AES_ENCODE_LEN(header.data_len))
@@ -321,7 +321,7 @@ int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char ist
             ucdata = NULL;
         else
             ucdata = (char *) malloc(sizeof(char) * header.data_len);
-        aes_decode((unsigned char *) tbuf + headerlen, header.data_len, (unsigned char *) ucdata, s->aes_key);
+        aes_decrypt((unsigned char *) tbuf + headerlen, header.data_len, (unsigned char *) ucdata, s->aes_key);
         if(istcp && s->tcp_flg == 0)
         {
             s->tcp_flg = 1;
@@ -393,8 +393,8 @@ int gs_enc_data(__const__ char *buf, __const__ int len, char **enc_buf, int *enc
     tmp = (unsigned char *) tmpdata + len;
     while(tmplen--)
         *tmp++ = rand() % 256;
-    aes_encode((unsigned char *) &header, sizeof(__header_t), (unsigned char *) *enc_buf, aes_key);
-    aes_encode((unsigned char *) tmpdata, mindatalen, (unsigned char *) (*enc_buf) + headerlen, aes_key);
+    aes_encrypt((unsigned char *) &header, sizeof(__header_t), (unsigned char *) *enc_buf, aes_key);
+    aes_encrypt((unsigned char *) tmpdata, mindatalen, (unsigned char *) (*enc_buf) + headerlen, aes_key);
     tmp = (unsigned char *) (*enc_buf) + headerlen + mindatalen;
     while(randlen--)
         *tmp++ = rand() % 256;
