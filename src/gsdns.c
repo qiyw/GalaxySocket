@@ -6,7 +6,6 @@
 #include "pipe.h"
 #include "common.h"
 #include "log.h"
-#include "crc32.h"
 
 static int __tcp_connect(pp_tcp_t *srv);
 
@@ -65,7 +64,6 @@ int main(int argc, char** argv)
             free(aes_key);
             continue;
         }
-        uint32_t crc = CRC32(aes_key, GS_AES_KEY_LEN / 8);
         srvaddr = (struct sockaddr_storage *) malloc(sizeof(struct sockaddr_storage));
         if(getfirsthostbyname(conf->server, (struct sockaddr *) srvaddr) != 0)
         {
@@ -98,10 +96,10 @@ int main(int argc, char** argv)
             addr6 = (struct sockaddr_in6 *) dnsaddr;
             addr6->sin6_port = htons(conf->dns_port);
         }
-        if(do_bind(conf->baddr6, conf->baddr, conf->bport, loop, aes_key, crc, (struct sockaddr *) srvaddr, (struct sockaddr *) dnsaddr, NULL, 0, 0, __tcp_connect, __udp_srv_read) != 0)
+        if(do_bind(conf->baddr6, conf->baddr, conf->bport, loop, aes_key, (struct sockaddr *) srvaddr, (struct sockaddr *) dnsaddr, NULL, 0, 0, __tcp_connect, __udp_srv_read) != 0)
         {
             LOG_ERR("bind failed\n");
-            continue;
+            return 1;
         }
     }
     pp_loop_run(loop);
@@ -126,7 +124,6 @@ static int __tcp_connect(pp_tcp_t *srv)
         return 1;
     }
     client->aes_key = ((gs_tcp_t *) srv)->aes_key;
-    client->crc32 = ((gs_tcp_t *) srv)->crc32;
     client->seraddr = ((gs_tcp_t *) srv)->seraddr;
     client->dnsaddr = ((gs_tcp_t *) srv)->dnsaddr;
     client->data = NULL;
@@ -220,7 +217,6 @@ static int __udp_srv_read(pp_udp_t *srv, __const__ struct msghdr *msg, __const__
     gs_udp_t *client = (gs_udp_t *) malloc(sizeof(gs_udp_t));
     memset(client, '\0', sizeof(gs_udp_t));
     client->aes_key = ((gs_udp_t *) srv)->aes_key;
-    client->crc32 = ((gs_udp_t *) srv)->crc32;
     client->seraddr = ((gs_udp_t *) srv)->seraddr;
     client->dnsaddr = ((gs_udp_t *) srv)->dnsaddr;
     client->data = NULL;

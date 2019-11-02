@@ -12,7 +12,6 @@ struct bind_args
 {
     pp_loop_t *loop;
     unsigned char *aes_key;
-    uint32_t crc32;
     struct sockaddr* seraddr;
     struct sockaddr* dnsaddr;
     void *data;
@@ -46,7 +45,6 @@ static int __tcp_accepting(pp_tcp_t *srv, pp_tcp_t **client)
     memset(*client, '\0', sizeof(gs_tcp_t));
     gs_tcp_t *tcp = (gs_tcp_t *) *client;
     tcp->aes_key = ((gs_tcp_t *) srv)->aes_key;
-    tcp->crc32 = ((gs_tcp_t *) srv)->crc32;
     tcp->seraddr = ((gs_tcp_t *) srv)->seraddr;
     tcp->dnsaddr = ((gs_tcp_t *) srv)->dnsaddr;
     tcp->data = NULL;
@@ -62,7 +60,6 @@ static int __udp_accepting(pp_udp_t *srv, pp_udp_t **client)
     memset(*client, '\0', sizeof(gs_udp_t));
     gs_udp_t *udp = (gs_udp_t *) *client;
     udp->aes_key = ((gs_udp_t *) srv)->aes_key;
-    udp->crc32 = ((gs_udp_t *) srv)->crc32;
     udp->seraddr = ((gs_udp_t *) srv)->seraddr;
     udp->dnsaddr = ((gs_udp_t *) srv)->dnsaddr;
     udp->data = NULL;
@@ -77,7 +74,6 @@ static int __do_tcp_bind(struct sockaddr *addr, struct bind_args *ba, pp_tcp_acc
     gs_tcp_t *tcp = (gs_tcp_t *) malloc(sizeof(gs_tcp_t));
     memset(tcp, '\0', sizeof(gs_tcp_t));
     tcp->aes_key = ba->aes_key;
-    tcp->crc32 = ba->crc32;
     tcp->seraddr = ba->seraddr;
     tcp->dnsaddr = ba->dnsaddr;
     tcp->data = ba->data;
@@ -106,7 +102,6 @@ static int __do_udp_bind(struct sockaddr *addr, struct bind_args *ba, pp_udp_rea
     gs_udp_t *udp = (gs_udp_t *) malloc(sizeof(gs_udp_t));
     memset(udp, '\0', sizeof(gs_udp_t));
     udp->aes_key = ba->aes_key;
-    udp->crc32 = ba->crc32;
     udp->seraddr = ba->seraddr;
     udp->dnsaddr = ba->dnsaddr;
     udp->data = ba->data;
@@ -129,7 +124,7 @@ static int __do_udp_bind(struct sockaddr *addr, struct bind_args *ba, pp_udp_rea
     return 0;
 }
 
-int do_bind(char *host6, char *host4, int port, pp_loop_t *loop, unsigned char *aes_key, uint32_t crc32, struct sockaddr* seraddr, struct sockaddr* dnsaddr, void *data, int tcp_flags, int udp_flags, pp_tcp_accepted_f tcp_cb, pp_udp_read_f udp_cb)
+int do_bind(char *host6, char *host4, int port, pp_loop_t *loop, unsigned char *aes_key, struct sockaddr* seraddr, struct sockaddr* dnsaddr, void *data, int tcp_flags, int udp_flags, pp_tcp_accepted_f tcp_cb, pp_udp_read_f udp_cb)
 {
     LOG_DEBUG("do_bind start\n");
     struct sockaddr_in6 addr6;
@@ -140,7 +135,6 @@ int do_bind(char *host6, char *host4, int port, pp_loop_t *loop, unsigned char *
     ba.loop = loop;
     ba.aes_key = aes_key;
     ba.data = data;
-    ba.crc32 = crc32;
     ba.dnsaddr = dnsaddr;
     ba.seraddr = seraddr;
 
@@ -302,7 +296,7 @@ int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char ist
         aes_decrypt((unsigned char *) tbuf, sizeof(__header_t), (unsigned char *) &header, s->aes_key);
         reverse((char *) &header.data_total_len, sizeof(uint32_t));
         reverse((char *) &header.data_len, sizeof(uint32_t));
-        if(header.crc32 != s->crc32 || header.data_total_len < GS_AES_ENCODE_LEN(header.data_len))
+        if(header.data_total_len < GS_AES_ENCODE_LEN(header.data_len))
         {
             if(istcp)
             {
@@ -321,7 +315,21 @@ int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char ist
             ucdata = NULL;
         else
             ucdata = (char *) malloc(sizeof(char) * header.data_len);
-        aes_decrypt((unsigned char *) tbuf + headerlen, header.data_len, (unsigned char *) ucdata, s->aes_key);
+        if(ucdata != NULL)
+            aes_decrypt((unsigned char *) tbuf + headerlen, header.data_len, (unsigned char *) ucdata, s->aes_key);
+        if((ucdata == NULL && header.crc32 != 0)
+            || (CRC32((unsigned char *) ucdata, header.data_len) != header.crc32))
+        {
+            if(istcp)
+            {
+                return 1;
+            }
+            else
+            {
+                tlen = 0;
+                break;
+            }
+        }
         if(istcp && s->tcp_flg == 0)
         {
             s->tcp_flg = 1;
@@ -364,12 +372,26 @@ int gs_parse(gs_socket_t *s, __const__ char *buf, __const__ size_t len, char ist
     return 0;
 }
 
+/*
+ *  +-------------------------------------------------------+------------------+
+ *  |                          HEADER                       |       BODY       |
+ *  +-----+----------------+-------------+--------+---------+------------------+
+ *  | CRC | DATA TOTAL LEN |  DATA LEN   | STATUS | RESERVE |  INPUT RAW DATA  |
+ *  +-----+----------------+-------------+--------+---------+------------------+
+ *  |  4  |        4       |      4      |    1   |    2    |   Raw Data Len   |
+ *  +-----+----------------+-------------+--------+---------+------------------+
+ *  |                      AES CRC ENCRYPT                  | AES CRC ENCRYPT  |
+ *  +-------------------------------------------------------+------------------+-------------+
+ *  |                      ENCRYPTED HEADER                 |  ENCRYPTED BODY  | RANDOM DATA |
+ *  +-------------------------------------------------------+------------------+-------------+
+ *  |                            16                         |     Variable     |   1~1024    |
+ *  +-------------------------------------------------------+------------------+-------------+
+ *  data total len = encrypted body len + random data len
+ */
 int gs_enc_data(__const__ char *buf, __const__ int len, char **enc_buf, int *enc_len, char status, unsigned char *aes_key)
 {
     static char fst = 0;
     unsigned char *tmp;
-    char *tmpdata;
-    int tmplen;
     if(fst == 0)
     {
         srand((unsigned) time(NULL));
@@ -379,7 +401,7 @@ int gs_enc_data(__const__ char *buf, __const__ int len, char **enc_buf, int *enc
     int headerlen = GS_AES_ENCODE_LEN(sizeof(__header_t));
     int mindatalen = GS_AES_ENCODE_LEN(len);
     int randlen = rand() % GS_RANDOM_LEN + 1;
-    header.crc32 = CRC32(aes_key, GS_AES_KEY_LEN / 8);
+    header.crc32 = CRC32((unsigned char *) buf, len);
     header.data_total_len = mindatalen + randlen;
     header.data_len = len;
     reverse((char *) &header.data_total_len, sizeof(uint32_t));
@@ -387,18 +409,11 @@ int gs_enc_data(__const__ char *buf, __const__ int len, char **enc_buf, int *enc
     header.header.status = status;
     *enc_len = headerlen + mindatalen + randlen;
     *enc_buf = (char *) malloc(sizeof(char) * (*enc_len));
-    tmpdata = (char *) malloc(sizeof(char) * mindatalen);
-    memcpy(tmpdata, buf, len);
-    tmplen = mindatalen - len;
-    tmp = (unsigned char *) tmpdata + len;
-    while(tmplen--)
-        *tmp++ = rand() % 256;
     aes_encrypt((unsigned char *) &header, sizeof(__header_t), (unsigned char *) *enc_buf, aes_key);
-    aes_encrypt((unsigned char *) tmpdata, mindatalen, (unsigned char *) (*enc_buf) + headerlen, aes_key);
+    aes_encrypt((unsigned char *) buf, len, (unsigned char *) (*enc_buf) + headerlen, aes_key);
     tmp = (unsigned char *) (*enc_buf) + headerlen + mindatalen;
     while(randlen--)
         *tmp++ = rand() % 256;
-    free(tmpdata);
     return 0;
 }
 

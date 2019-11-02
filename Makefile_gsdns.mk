@@ -1,6 +1,6 @@
 include Makefile.inc
 
-GSDNS_SRCS = gsdns.c iconf.c common.c base64.c aes.c pipe.c thrdpool.c
+GSDNS_SRCS = gsdns.c iconf.c common.c base64.c aes.c pipe.c thrdpool.c crc32.c
 GSDNS_OBJS = $(patsubst %.c,$(OBJDIR)/%.o,$(GSDNS_SRCS))
 
 all: $(GSDNS_BIN)

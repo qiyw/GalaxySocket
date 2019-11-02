@@ -17,7 +17,6 @@ struct gs_socket_s
 {
     pp_socket_t s;
     unsigned char *aes_key;
-    uint32_t crc32;
     char *buf;
     int len;
     char tcp_flg;
@@ -34,7 +33,7 @@ typedef struct
 
 typedef int (*gs_parse_f)(gs_socket_t *, __const__ gs_header_t *, __const__ char *, uint32_t);
 
-int do_bind(char *host6, char *host4, int port, pp_loop_t *loop, unsigned char *aes_key, uint32_t crc32, struct sockaddr* seraddr, struct sockaddr* dnsaddr, void *data, int tcp_flags, int udp_flags, pp_tcp_accepted_f tcp_cb, pp_udp_read_f udp_cb);
+int do_bind(char *host6, char *host4, int port, pp_loop_t *loop, unsigned char *aes_key, struct sockaddr* seraddr, struct sockaddr* dnsaddr, void *data, int tcp_flags, int udp_flags, pp_tcp_accepted_f tcp_cb, pp_udp_read_f udp_cb);
 
 int closing(pp_socket_t *s);
 

@@ -13,7 +13,7 @@ GSSOCKS5_BIN = $(BINDIR)/gssocks5
 GSSERVER_BIN = $(BINDIR)/gsserver
 
 CFLAGS += -Os -Wall
-LDFLAGS += -s -lssl -lcrypto -liniparser -lpthread -lz
+LDFLAGS += -s -lssl -lcrypto -liniparser -lpthread
 
 ifdef DEBUG
 CFLAGS += -DDEBUG -g

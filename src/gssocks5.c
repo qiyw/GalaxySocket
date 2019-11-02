@@ -6,7 +6,6 @@
 #include "pipe.h"
 #include "common.h"
 #include "log.h"
-#include "crc32.h"
 
 #define SOCKS5_VERSION 0x05
 
@@ -80,7 +79,6 @@ int main(int argc, char** argv)
             free(aes_key);
             continue;
         }
-        uint32_t crc = CRC32(aes_key, GS_AES_KEY_LEN / 8);
         srvaddr = (struct sockaddr_storage *) malloc(sizeof(struct sockaddr_storage));
         if(getfirsthostbyname(conf->server, (struct sockaddr *) srvaddr) != 0)
         {
@@ -97,10 +95,10 @@ int main(int argc, char** argv)
             addr6 = (struct sockaddr_in6 *) srvaddr;
             addr6->sin6_port = htons(conf->port);
         }
-        if(do_bind(conf->baddr6, conf->baddr, conf->bport, loop, aes_key, crc, (struct sockaddr *) srvaddr, NULL, NULL, 0, 0, __tcp_connect, NULL) != 0)
+        if(do_bind(conf->baddr6, conf->baddr, conf->bport, loop, aes_key, (struct sockaddr *) srvaddr, NULL, NULL, 0, 0, __tcp_connect, NULL) != 0)
         {
             LOG_ERR("bind failed\n");
-            continue;
+            return 1;
         }
     }
     pp_loop_run(loop);
@@ -200,7 +198,6 @@ static int __s5_connect(pp_tcp_t *srv, __const__ char *buf, __const__ int len)
                     return 1;
                 }
                 tcp->aes_key = ((gs_tcp_t *) srv)->aes_key;
-                tcp->crc32 = ((gs_tcp_t *) srv)->crc32;
                 tcp->data = NULL;
                 gs_enc_data((char *) &header->atyp, dlen, &resbufc, &reslen, 0, ((gs_tcp_t *) srv)->aes_key);
                 int sts = pp_tcp_fast_write((pp_tcp_t *) tcp, (struct sockaddr *) ((gs_tcp_t *) srv)->seraddr, resbufc, reslen);
@@ -263,7 +260,6 @@ static int __s5_udp_forward(pp_tcp_t *srv, __const__ char *buf, __const__ int le
     gs_udp_t *client = (gs_udp_t *) malloc(sizeof(gs_udp_t));
     memset(client, '\0', sizeof(gs_udp_t));
     client->aes_key = ((gs_tcp_t *) srv)->aes_key;
-    client->crc32 = ((gs_tcp_t *) srv)->crc32;
     client->seraddr = ((gs_tcp_t *) srv)->seraddr;
     client->data = NULL;
     pp_udp_init(pp_get_loop((pp_socket_t *) srv), (pp_udp_t *) client, closing);

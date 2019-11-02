@@ -1,6 +1,6 @@
 include Makefile.inc
 
-GSSOCKS5_SRCS = gssocks5.c iconf.c common.c base64.c aes.c  pipe.c thrdpool.c
+GSSOCKS5_SRCS = gssocks5.c iconf.c common.c base64.c aes.c  pipe.c thrdpool.c crc32.c
 GSSOCKS5_OBJS = $(patsubst %.c,$(OBJDIR)/%.o,$(GSSOCKS5_SRCS))
 
 all: $(GSSOCKS5_BIN)

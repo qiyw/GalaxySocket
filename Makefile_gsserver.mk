@@ -1,6 +1,6 @@
 include Makefile.inc
 
-GSSERVER_SRCS = gsserver.c iconf.c common.c base64.c aes.c  pipe.c thrdpool.c
+GSSERVER_SRCS = gsserver.c iconf.c common.c base64.c aes.c  pipe.c thrdpool.c crc32.c
 GSSERVER_OBJS = $(patsubst %.c,$(OBJDIR)/%.o,$(GSSERVER_SRCS))
 
 all: $(GSSERVER_BIN)

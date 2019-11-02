@@ -1,6 +1,6 @@
 include Makefile.inc
 
-GSRED_SRCS = gsred.c iconf.c common.c base64.c aes.c  pipe.c thrdpool.c
+GSRED_SRCS = gsred.c iconf.c common.c base64.c aes.c  pipe.c thrdpool.c crc32.c
 GSRED_OBJS = $(patsubst %.c,$(OBJDIR)/%.o,$(GSRED_SRCS))
 
 all: $(GSRED_BIN)

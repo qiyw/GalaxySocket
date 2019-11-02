@@ -6,7 +6,6 @@
 #include "base64.h"
 #include "common.h"
 #include "log.h"
-#include "crc32.h"
 
 static int __tcp_connect(pp_tcp_t *srv);
 
@@ -61,11 +60,10 @@ int main(int argc, char** argv)
             free(aes_key);
             continue;
         }
-        uint32_t crc = CRC32(aes_key, GS_AES_KEY_LEN / 8);
-        if(do_bind(conf->baddr6, conf->baddr, conf->bport, loop, aes_key, crc, NULL, NULL, NULL, 0, 0, __tcp_connect, __udp_srv_read) != 0)
+        if(do_bind(conf->baddr6, conf->baddr, conf->bport, loop, aes_key, NULL, NULL, NULL, 0, 0, __tcp_connect, __udp_srv_read) != 0)
         {
             LOG_ERR("bind failed\n");
-            continue;
+            return 1;
         }
     }
     pp_loop_run(loop);
@@ -114,7 +112,6 @@ static int __tcp_srv_on_connect(gs_socket_t *s, __const__ gs_header_t *header, _
             return 1;
         }
         tcp->aes_key = ((gs_udp_t *) s)->aes_key;
-        tcp->crc32 = ((gs_udp_t *) s)->crc32;
         tcp->data = NULL;
         sts = pp_tcp_connect((pp_tcp_t *) tcp, (struct sockaddr *) &addr);
         if(sts == 0)
@@ -176,7 +173,6 @@ static int __udp_srv_on_read(gs_socket_t *s, __const__ gs_header_t *header, __co
     gs_udp_t *client = (gs_udp_t *) malloc(sizeof(gs_udp_t));
     memset(client, '\0', sizeof(gs_udp_t));
     client->aes_key = ((gs_udp_t *) s)->aes_key;
-    client->crc32 = ((gs_udp_t *) s)->crc32;
     client->data = NULL;
     pp_udp_init(pp_get_loop((pp_socket_t *) s), (pp_udp_t *) client, closing);
     if(pp_udp_connect((pp_udp_t *) client, (struct sockaddr *) &addr) != 0)
