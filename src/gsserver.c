@@ -30,7 +30,7 @@ static int __usage(char *prog)
     return 1;
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     LOG_DEBUG("main start\n");
     conf_t *conf;

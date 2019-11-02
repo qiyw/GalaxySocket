@@ -70,8 +70,8 @@ static __const__ uint32_t CRC32_TABLE[256] =
 
 uint32_t crc32_update(uint32_t crc, __const__ unsigned char *buf, int len)
 {
-    crc = crc ^0xffffffff;
+    crc = crc ^ 0xffffffff;
     while(len--)
         crc = CRC32_TABLE[(crc ^ *buf++) & 0xff] ^ (crc >> 8);
-    return crc^0xffffffff;
+    return crc ^ 0xffffffff;
 }

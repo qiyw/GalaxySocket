@@ -22,4 +22,6 @@ typedef struct
 
 conf_t **conf_read(char *filepath);
 
+void conf_free(conf_t **confs);
+
 #endif
