@@ -1,6 +1,11 @@
 #ifndef _ICONF_H
 #define _ICONF_H
 
+#define CONF_DEFAULT_PORT 1520
+#define CONF_DEFAULT_BIND_IPV4 "localhost"
+#define CONF_DEFAULT_BIND_IPV6 "localhost"
+#define CONF_DEFAULT_DNS "8.8.8.8"
+
 #include "iniparser/iniparser.h"
 
 typedef struct
