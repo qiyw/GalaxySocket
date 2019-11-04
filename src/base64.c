@@ -90,9 +90,6 @@ int b64_decode(__const__ unsigned char *indata, __const__ int len, unsigned char
         return 1;
     for(int i = 0; i < len; i++)
         buf[i] = B64_DECODE_TABLE[indata[i]];
-
-    for(int i = 0; i < len; i++)
-        printf("d = %d\n", buf[i]);
     itmp = buf;
     for(int i = 0; i < len / 4 - 1; i++)
     {
