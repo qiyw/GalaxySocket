@@ -364,6 +364,7 @@ int pp_tcp_bind(pp_tcp_t *tcp, struct sockaddr *addr, int flags)
     if(tcp->fd <= 0)
         return 1;
     __set_timeout(tcp->fd);
+    __set_reuseaddr(tcp->fd);
     if(addr->sa_family == AF_INET6)
     {
         if(flags == PP_TCP_IPV6ONLY)
@@ -381,8 +382,6 @@ int pp_tcp_bind(pp_tcp_t *tcp, struct sockaddr *addr, int flags)
             return 1;
         memcpy(&tcp->addr, addr, sizeof(struct sockaddr_in));
     }
-    if(__set_reuseaddr(tcp->fd) != 0)
-        return 1;
     if(__set_non_blocking(tcp->fd) != 0)
         return 1;
     return 0;
@@ -534,6 +533,7 @@ int pp_udp_bind(pp_udp_t *udp, struct sockaddr *addr, int flags)
     if(udp->fd <= 0)
         return 1;
     __set_timeout(udp->fd);
+    __set_reuseaddr(udp->fd);
     if(addr->sa_family == AF_INET6)
     {
         if((flags & 1) == 1)
@@ -567,8 +567,6 @@ int pp_udp_bind(pp_udp_t *udp, struct sockaddr *addr, int flags)
             return 1;
         memcpy(&udp->addr, addr, sizeof(struct sockaddr_in));
     }
-    if(__set_reuseaddr(udp->fd) != 0)
-        return 1;
     if(__set_non_blocking(udp->fd) != 0)
         return 1;
     return 0;

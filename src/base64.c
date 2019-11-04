@@ -56,7 +56,7 @@ int b64_encode(__const__ unsigned char *indata, __const__ int len, unsigned char
     for(int i = 0; i < len / 3; i++)
     {
         *otmp++ = B64_ENCODE_TABLE[(*itmp++ >> 2) & 0x3f];
-        *otmp++ = B64_ENCODE_TABLE[(*(itmp - 1) << 4 | *itmp++ >> 4) & 0x3f];
+        *otmp++ = B64_ENCODE_TABLE[(*(itmp - 1) << 4 | *itmp >> 4) & 0x3f]; itmp++;
         *otmp++ = B64_ENCODE_TABLE[(*(itmp - 1) << 2 | *itmp >> 6) & 0x3f];
         *otmp++ = B64_ENCODE_TABLE[*itmp++ & 0x3f];
     }
@@ -93,16 +93,16 @@ int b64_decode(__const__ unsigned char *indata, __const__ int len, unsigned char
     itmp = buf;
     for(int i = 0; i < len / 4 - 1; i++)
     {
-        *otmp++ = (*itmp++ << 2) | (*itmp >> 4);
-        *otmp++ = (*itmp++ << 4) | (*itmp >> 2);
-        *otmp++ = (*itmp++ << 6) | *itmp++;
+        *otmp++ = (*itmp << 2) | (*(itmp + 1) >> 4); itmp++;
+        *otmp++ = (*itmp << 4) | (*(itmp + 1) >> 2); itmp++;
+        *otmp++ = (*itmp << 6) | *(itmp + 1); itmp += 2;
     }
-    *otmp++ = (*itmp++ << 2) | (*itmp >> 4);
+    *otmp++ = (*itmp << 2) | (*(itmp + 1) >> 4); itmp++;
     if(*(itmp + 1) != 0xff)
-        *otmp++ = (*itmp++ << 4) | (*itmp >> 2);
+        { *otmp++ = (*itmp << 4) | (*(itmp + 1) >> 2); itmp++; }
     else
         return 0;
     if(*(itmp + 1) != 0xff)
-        *otmp++ = (*itmp++ << 6) | *itmp++;
+        *otmp++ = (*itmp << 6) | *(itmp + 1);
     return 0;
 }
