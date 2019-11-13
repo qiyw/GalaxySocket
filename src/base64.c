@@ -77,7 +77,7 @@ int b64_encode(__const__ unsigned char *indata, __const__ int len, unsigned char
             *otmp++ = '=';
             break;
     }
-    return 0;
+    return B64_ENCODE_LEN(len);
 }
 
 int b64_decode(__const__ unsigned char *indata, __const__ int len, unsigned char *outdata)
@@ -87,7 +87,7 @@ int b64_decode(__const__ unsigned char *indata, __const__ int len, unsigned char
     unsigned char buf[len];
     if(len == 0) return 0;
     if(len % 4 != 0)
-        return 1;
+        return -1;
     for(int i = 0; i < len; i++)
         buf[i] = B64_DECODE_TABLE[indata[i]];
     itmp = buf;
@@ -101,8 +101,10 @@ int b64_decode(__const__ unsigned char *indata, __const__ int len, unsigned char
     if(*(itmp + 1) != 0xff)
         { *otmp++ = (*itmp << 4) | (*(itmp + 1) >> 2); itmp++; }
     else
-        return 0;
+        return len / 4 * 3 - 2;
     if(*(itmp + 1) != 0xff)
         *otmp++ = (*itmp << 6) | *(itmp + 1);
-    return 0;
+    else
+        return len / 4 * 3 - 1;
+    return len / 4 * 3;
 }
