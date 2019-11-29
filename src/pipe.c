@@ -655,7 +655,7 @@ int pp_loop_run(pp_loop_t *loop)
         for(int i = 0 ; i < wait_count; i++)
         {
             uint32_t events_flags = events[i].events;
-            if ( events_flags & EPOLLERR || events_flags & EPOLLHUP || (! events_flags & EPOLLIN)) {
+            if(events_flags & EPOLLERR || events_flags & EPOLLHUP || (!(events_flags & EPOLLIN))) {
                 pp_close((pp_socket_t *) events[i].data.ptr);
                 continue;
             }
