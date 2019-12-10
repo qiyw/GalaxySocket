@@ -101,12 +101,6 @@ tpool_t *tpool_create(__const__ int size)
         free(tpool);
         return NULL;
     }
-    if(pthread_attr_destroy(&tpool->tattr) != 0)
-    {
-        free(tpool);
-        return NULL;
-    }
-
     tpool->tnum = size;
     tpool->tids = calloc(size, sizeof(pthread_t));
     tpool->tsts = calloc(size, sizeof(char));
@@ -121,6 +115,13 @@ tpool_t *tpool_create(__const__ int size)
             free(tpool);
             return NULL;
         }
+    }
+    if(pthread_attr_destroy(&tpool->tattr) != 0)
+    {
+        free(tpool->tids);
+        free(tpool->tsts);
+        free(tpool);
+        return NULL;
     }
     return tpool;
 }
