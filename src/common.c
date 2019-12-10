@@ -28,12 +28,7 @@ typedef struct
 static struct addrinfo *__gethostbyname(__const__ char *hostname)
 {
     struct addrinfo *result = NULL;
-    struct addrinfo hints;
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = 0;
-    hints.ai_protocol = 0;
-    hints.ai_flags = 0;
-    if(getaddrinfo(hostname, NULL, &hints, &result) != 0)
+    if(getaddrinfo(hostname, NULL, NULL, &result) != 0)
         return NULL;
     return result;
 }

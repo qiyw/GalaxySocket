@@ -19,3 +19,7 @@ ifdef DEBUG
 CFLAGS += -DDEBUG -g
 LDFLAGS += -g
 endif
+
+ifdef STATIC
+LDFLAGS += -static
+endif
